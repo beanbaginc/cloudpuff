@@ -1,0 +1,5 @@
+.coverage
+*.py[cod]
+*.egg-info/
+*.egg
+.*.swp

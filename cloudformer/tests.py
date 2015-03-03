@@ -268,6 +268,33 @@ class TemplateReaderTests(TestCase):
                 'key2': 'hello',
             })
 
+    def test_statement_call_macro_nested(self):
+        """Testing TemplateReader with !call-macro and nested path"""
+        reader = TemplateReader()
+        reader.load_string(
+            '--- !macros\n'
+            'my-macros:\n'
+            '    test-macro:\n'
+            '        defaultParams:\n'
+            '            param1: default1\n'
+            '            param2: default2\n'
+            '\n'
+            '        content:\n'
+            '            key1: $$param1\n'
+            '            key2: $$param2\n'
+            '\n'
+            '---\n'
+            'key: !call-macro\n'
+            '    macro: my-macros.test-macro\n'
+            '    param2: hello\n')
+
+        self.assertEqual(
+            reader.doc['key'],
+            {
+                'key1': 'default1',
+                'key2': 'hello',
+            })
+
     def test_statement_call_macro_and_merge(self):
         """Testing TemplateReader with !call-macro and '<'"""
         reader = TemplateReader()

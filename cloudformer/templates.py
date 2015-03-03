@@ -40,7 +40,7 @@ class TemplateLoader(yaml.Loader):
 
     * Documents in the form of "--- !macros" may define macros that accept
       arguments and return generated content. These can be called by
-      "!call-macro".
+      "!call-macro". Macro names, like variables, can have nested paths.
 
     * "!import" statements will import variables and macros found in the
       named file.
@@ -177,7 +177,7 @@ class TemplateLoader(yaml.Loader):
         name = values.pop('macro')
 
         try:
-            macro = self.macros[name]
+            macro = self._resolve_var(name, self.macros)
             content = macro['content']
         except KeyError:
             raise ConstructorError('"%s" is not a valid macro' % name)

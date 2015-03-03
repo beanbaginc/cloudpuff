@@ -70,6 +70,18 @@ class TemplateReaderTests(TestCase):
 
         self.assertEqual(reader.doc['key'], '123')
 
+    def test_embed_vars_with_path(self):
+        """Testing TemplateReader with embedding $$variables.with.paths"""
+        reader = TemplateReader()
+        reader.variables['myvar'] = {
+            'a': {
+                'b': '123'
+            }
+        }
+        reader.load_string('key: $${myvar.a.b}')
+
+        self.assertEqual(reader.doc['key'], '123')
+
     def test_embed_funcs(self):
         """Testing TemplateReader with embedding !!Functions"""
         reader = TemplateReader()

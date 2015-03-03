@@ -32,6 +32,9 @@ class TemplateLoader(yaml.Loader):
     * Any "$$MyVarName" strings found in any values will be expanded into
       strings based on a defined variable.
 
+    * Any "$${MyVarKey.MyVarName}" strings found in any values will be
+      looked up as paths within the known variables and expanded into strings.
+
     * Documents in the form of "--- !vars" may define variables as
       keys/values.
 
@@ -50,11 +53,11 @@ class TemplateLoader(yaml.Loader):
     """
 
     PARSE_STR_RE = re.compile(
-        '('
-        '!!(?P<func>[A-Za-z]+)\((?P<params>(((@@)?[A-Za-z0-9:_]+)(,\s*)?)+)\)'
-        '|@@(?P<ref_name>[A-Za-z0-9:_]+)'
-        '|\$\$(?P<var_name>[A-Za-z0-9_]+)'
-        ')')
+        r'('
+        r'!!(?P<func>[A-Za-z]+)\((?P<params>(((@@)?[A-Za-z0-9:_]+)(,\s*)?)+)\)'
+        r'|@@(?P<ref_name>[A-Za-z0-9:_]+)'
+        r'|\$\$((?P<var_name>[A-Za-z0-9_]+)|{(?P<var_path>[A-Za-z0-9_.]+)})'
+        r')')
     FUNC_PARAM_RE = re.compile(',\s*')
 
     def __init__(self, *args, **kwargs):
@@ -225,7 +228,7 @@ class TemplateLoader(yaml.Loader):
             ]
         elif isinstance(macro_value, VarReference):
             try:
-                return variables[macro_value.name]
+                return self._resolve_var(macro_value.name, variables)
             except KeyError:
                 raise ConstructorError(
                     'Unknown variable "%s"'
@@ -247,11 +250,16 @@ class TemplateLoader(yaml.Loader):
         for item in items:
             collapse_next_string = False
 
-            if isinstance(item, VarReference) and item.name in variables:
-                item = variables[item.name]
-                collapse_string = True
-                collapse_next_string = True
-                was_string = True
+            if isinstance(item, VarReference):
+                try:
+                    item = self._resolve_var(item.name, variables)
+                except KeyError:
+                    # We'll keep it as a VarReference.
+                    pass
+                else:
+                    collapse_string = True
+                    collapse_next_string = True
+                    was_string = True
 
             if isinstance(item, basestring):
                 if collapse_string and result:
@@ -265,6 +273,20 @@ class TemplateLoader(yaml.Loader):
                 result.append(item)
                 collapse_string = False
                 was_string = False
+
+        return result
+
+    def _resolve_var(self, var_name, variables):
+        """Resolve a variable name or path.
+
+        If the variable contains one or more dots in the name, it will
+        be looked up as a path within the variables dictionary.
+        """
+        var_parts = var_name.split('.')
+        result = variables
+
+        for part in var_parts:
+            result = result[part]
 
         return result
 
@@ -308,6 +330,8 @@ class TemplateLoader(yaml.Loader):
                 })
             elif groups['var_name']:
                 parts.append(VarReference(groups['var_name']))
+            elif groups['var_path']:
+                parts.append(VarReference(groups['var_path']))
 
             prev = m.end()
 

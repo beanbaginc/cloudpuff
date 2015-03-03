@@ -101,7 +101,7 @@ class TemplateLoader(yaml.Loader):
         pairs = self.construct_pairs(node)
 
         for key, value in pairs:
-            if key == '<':
+            if isinstance(key, basestring) and key == '<':
                 d.update(value)
             else:
                 d[key] = value

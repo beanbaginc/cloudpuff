@@ -103,6 +103,15 @@ class TemplateReaderTests(TestCase):
                 ]
             })
 
+    def test_embed_vars_in_keys(self):
+        """Testing TemplateReader with embedding $$variables in keys"""
+        reader = TemplateReader()
+        reader.template_state.variables['myvar'] = 'abc'
+        reader.load_string('$$myvar: foo')
+
+        self.assertTrue('abc' in reader.doc)
+        self.assertEqual(reader.doc['abc'], 'foo')
+
     def test_process_strings_refs(self):
         """Testing TemplateReader with processing strings with @@References"""
         reader = TemplateReader()

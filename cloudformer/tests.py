@@ -22,7 +22,11 @@ class TemplateCompilerTests(TestCase):
             '    key: value\n'
             'Mappings:\n'
             '    key: value\n'
+            'Conditions:\n'
+            '    key: value\n'
             'Resources:\n'
+            '    key: value\n'
+            'Outputs:\n'
             '    key: value\n'
             'junk: blah\n')
 
@@ -31,7 +35,9 @@ class TemplateCompilerTests(TestCase):
         self.assertEqual(doc['Description'], 'My description. [v1.0]')
         self.assertEqual(doc['Parameters'], {'key': 'value'})
         self.assertEqual(doc['Mappings'], {'key': 'value'})
+        self.assertEqual(doc['Conditions'], {'key': 'value'})
         self.assertEqual(doc['Resources'], {'key': 'value'})
+        self.assertEqual(doc['Outputs'], {'key': 'value'})
         self.assertFalse('junk' in doc)
 
 

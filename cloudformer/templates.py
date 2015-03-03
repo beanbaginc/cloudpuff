@@ -448,7 +448,8 @@ class TemplateCompiler(object):
 
             self.doc['Description'] = description
 
-        for key in ('Parameters', 'Mappings', 'Resources'):
+        for key in ('Parameters', 'Mappings', 'Conditions', 'Resources',
+                    'Outputs'):
             try:
                 self.doc[key] = reader.doc[key]
             except KeyError:

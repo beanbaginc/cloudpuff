@@ -10,6 +10,7 @@ PACKAGE_NAME = 'cloudformer'
 
 commands = {
     'cloudformer-compile-template': 'compile_template',
+    'cloudformer-make-depends': 'make_depends',
 }
 
 setup(

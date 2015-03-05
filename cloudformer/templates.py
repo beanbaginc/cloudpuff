@@ -19,11 +19,13 @@ class TemplateState(object):
         self.variables = {}
         self.macros = {}
         self.unresolved_variables = set()
+        self.imported_files = set()
 
     def update(self, other_state):
         self.macros.update(other_state.macros)
         self.variables.update(other_state.variables)
         self.unresolved_variables.update(other_state.unresolved_variables)
+        self.imported_files.update(other_state.imported_files)
 
     def resolve(self, name, d):
         """Resolve a variable or macro name or path.
@@ -300,6 +302,7 @@ class TemplateLoader(yaml.Loader):
         variables found will be copied to this template.
         """
         filenames = self.construct_scalar(node).split()
+        self.template_state.imported_files.update(filenames)
 
         for filename in filenames:
             reader = TemplateReader()

@@ -1,6 +1,5 @@
 from __future__ import unicode_literals
 
-import json
 import os
 import sys
 
@@ -22,8 +21,7 @@ class CompileTemplate(BaseCommand):
     def main(self):
         compiler = TemplateCompiler()
         compiler.load_file(self.options.filename)
-
-        dumped = json.dumps(compiler.doc, indent=4)
+        dumped = compiler.to_json()
 
         if self.options.dest_filename:
             dirname = os.path.dirname(self.options.dest_filename)

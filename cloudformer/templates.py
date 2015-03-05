@@ -180,7 +180,7 @@ class TemplateLoader(yaml.Loader):
     PARSE_STR_RE = re.compile(
         r'('
         r'!!(?P<func>[A-Za-z]+)\((?P<params>(((@@)?[A-Za-z0-9:_]+)(,\s*)?)+)\)'
-        r'|@@(?P<ref_name>[A-Za-z0-9:_]+)'
+        r'|@@(?P<ref_brace>{)?(?P<ref_name>[A-Za-z0-9:_]+)(?(ref_brace)})'
         r'|\$\$((?P<var_name>[A-Za-z0-9_]+)|{(?P<var_path>[A-Za-z0-9_.]+)})'
         r')')
     FUNC_PARAM_RE = re.compile(',\s*')

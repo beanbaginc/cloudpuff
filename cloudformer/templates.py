@@ -1,11 +1,134 @@
 import re
-import sys
 from collections import OrderedDict
 from itertools import chain
-from io import StringIO
 
+import six
 import yaml
 from yaml.constructor import ConstructorError
+
+
+class TemplateState(object):
+    """Manages the state of a template.
+
+    This keeps track of all the variables, unresolved variables, and
+    macros defined by a template. It also contains functions for resolving
+    variables to values.
+    """
+
+    def __init__(self):
+        self.variables = {}
+        self.macros = {}
+        self.unresolved_variables = set()
+
+    def update(self, other_state):
+        self.macros.update(other_state.macros)
+        self.variables.update(other_state.variables)
+        self.unresolved_variables.update(other_state.unresolved_variables)
+
+    def resolve(self, name, d):
+        """Resolve a variable or macro name or path.
+
+        If the name contains one or more dots, it will be looked up as
+        a path within the provided dictionary.
+        """
+        result = d
+
+        for part in name.split('.'):
+            result = result[part]
+
+        return result
+
+    def resolve_variables_for_tree(self, node_value, variables=None):
+        """Resolve variables found in a part of the tree.
+
+        This will walk the tree and resolve any variables found. If
+        a variable is referenced that does not exist, a KeyError will
+        be raised.
+        """
+        if variables is None:
+            variables = self.variables
+
+        if isinstance(node_value, dict):
+            return OrderedDict(
+                (self.resolve_variables_for_tree(key, variables),
+                 self.resolve_variables_for_tree(value, variables))
+                for key, value in six.iteritems(node_value)
+            )
+        elif isinstance(node_value, list):
+            value = [
+                self.resolve_variables_for_tree(item, variables)
+                for item in self.collapse_variables(node_value, variables)
+            ]
+
+            if (isinstance(node_value, VarsStringsList) and
+                all([isinstance(item, basestring) for item in value])):
+                value = ''.join(value)
+
+            return value
+        elif isinstance(node_value, VarReference):
+            try:
+                value = self.resolve(node_value.name, variables)
+                self.unresolved_variables.discard(node_value)
+
+                return value
+            except KeyError:
+                raise KeyError('Unknown variable "%s"' % node_value.name)
+        else:
+            return node_value
+
+    def normalize_vars_list(self, l):
+        """Normalize a list to a list or VarsStringsList.
+
+        If the list contains only VarReferences and strings, this will be
+        returned as a VarsStringsList. That allows the string to be later
+        identified, so that it can potentially be turned back into a
+        single string.
+        """
+        if all([isinstance(item, (basestring, VarReference)) for item in l]):
+            return VarsStringsList(l)
+        else:
+            return l
+
+    def collapse_variables(self, items, variables=None):
+        """Collapse a list of strings or variable references.
+
+        All string items will remain their own items in the list. Any
+        variable reference items that have a matching variable in the
+        template will be folded into the adjacent strings.
+        """
+        if variables is None:
+            variables = self.variables
+
+        collapse_string = False
+        result = []
+
+        for item in items:
+            collapse_next_string = False
+
+            if isinstance(item, VarReference):
+                try:
+                    item = self.resolve(item.name, variables)
+                except KeyError:
+                    # We'll keep it as a VarReference, and store it
+                    # for later.
+                    item.parent = result
+                    self.unresolved_variables.add(item)
+                else:
+                    collapse_string = True
+                    collapse_next_string = True
+
+            if isinstance(item, basestring):
+                if collapse_string and result:
+                    result[-1] += item
+                else:
+                    result.append(item)
+
+                collapse_string = collapse_next_string
+            else:
+                result.append(item)
+                collapse_string = False
+
+        return result
 
 
 class TemplateLoader(yaml.Loader):
@@ -63,8 +186,7 @@ class TemplateLoader(yaml.Loader):
     def __init__(self, *args, **kwargs):
         super(TemplateLoader, self).__init__(*args, **kwargs)
 
-        self.macros = {}
-        self.variables = {}
+        self.template_state = None
 
     @classmethod
     def register_template_constructors(cls):
@@ -135,15 +257,34 @@ class TemplateLoader(yaml.Loader):
             for line in lines
         ]))
 
-        if len(norm_lines) == 1:
-            result = norm_lines[0]
-        else:
+        should_join = (len(lines) > 1)
+
+        if not should_join and len(norm_lines) > 1:
+            has_strings = False
+            has_dicts = False
+
+            # See if there's anything other than strings and VarReferencs.
+            for item in norm_lines:
+                if isinstance(item, dict):
+                    has_dicts = True
+                elif isinstance(item, basestring):
+                    has_strings = True
+
+            should_join = has_dicts
+
+        norm_lines = self.template_state.normalize_vars_list(norm_lines)
+
+        if should_join:
             result = {
                 'Fn::Join': [
                     '',
                     norm_lines
                 ]
             }
+        elif len(norm_lines) == 1:
+            result = norm_lines[0]
+        else:
+            result = norm_lines
 
         if process_func:
             result = {
@@ -164,8 +305,7 @@ class TemplateLoader(yaml.Loader):
             reader = TemplateReader()
             reader.load_file(filename)
 
-            self.macros.update(reader.macros)
-            self.variables.update(reader.variables)
+            self.template_state.update(reader.template_state)
 
     def construct_call_macro(self, node):
         """Handle !call-macro statements.
@@ -177,12 +317,13 @@ class TemplateLoader(yaml.Loader):
         name = values.pop('macro')
 
         try:
-            macro = self._resolve_var(name, self.macros)
+            macro = self.template_state.resolve(name,
+                                                self.template_state.macros)
             content = macro['content']
         except KeyError:
             raise ConstructorError('"%s" is not a valid macro' % name)
 
-        variables = self.variables.copy()
+        variables = self.template_state.variables.copy()
         variables.update(macro.get('defaultParams', {}))
         variables.update(values)
 
@@ -215,80 +356,11 @@ class TemplateLoader(yaml.Loader):
         variables based on the default parameters and any variables
         passed to the template.
         """
-        if isinstance(macro_value, dict):
-            return OrderedDict(
-                (self._process_macro(key, macro_name, variables),
-                 self._process_macro(value, macro_name, variables))
-                for key, value in macro_value.iteritems()
-            )
-        elif isinstance(macro_value, list):
-            return [
-                self._process_macro(item, macro_name, variables)
-                for item in self._collapse_vars(macro_value, variables)
-            ]
-        elif isinstance(macro_value, VarReference):
-            try:
-                return self._resolve_var(macro_value.name, variables)
-            except KeyError:
-                raise ConstructorError(
-                    'Unknown variable "%s"'
-                    % macro_value.name)
-        else:
-            return macro_value
-
-    def _collapse_vars(self, items, variables):
-        """Collapse a list of strings or variable references.
-
-        All string items will remain their own items in the list. Any
-        variable reference items that have a matching variable in the
-        template will be folded into the adjacent strings.
-        """
-        collapse_string = False
-        was_string = False
-        result = []
-
-        for item in items:
-            collapse_next_string = False
-
-            if isinstance(item, VarReference):
-                try:
-                    item = self._resolve_var(item.name, variables)
-                except KeyError:
-                    # We'll keep it as a VarReference.
-                    pass
-                else:
-                    collapse_string = True
-                    collapse_next_string = True
-                    was_string = True
-
-            if isinstance(item, basestring):
-                if collapse_string and result:
-                    result[-1] += item
-                else:
-                    result.append(item)
-
-                collapse_string = collapse_next_string
-                was_string = True
-            else:
-                result.append(item)
-                collapse_string = False
-                was_string = False
-
-        return result
-
-    def _resolve_var(self, var_name, variables):
-        """Resolve a variable name or path.
-
-        If the variable contains one or more dots in the name, it will
-        be looked up as a path within the variables dictionary.
-        """
-        var_parts = var_name.split('.')
-        result = variables
-
-        for part in var_parts:
-            result = result[part]
-
-        return result
+        try:
+            return self.template_state.resolve_variables_for_tree(
+                macro_value, variables)
+        except KeyError as e:
+            raise ConstructorError(unicode(e))
 
     def _parse_string(self, s, always_return_list=False):
         """Parse a string for any references, functions, or variables.
@@ -339,7 +411,7 @@ class TemplateLoader(yaml.Loader):
             parts.append(s[prev:])
 
         if always_return_list or len(parts) > 1:
-            return self._collapse_vars(parts, self.variables)
+            return self.template_state.collapse_variables(parts)
         else:
             return parts[0]
 
@@ -370,6 +442,16 @@ class VarReference(object):
     def __init__(self, name):
         self.name = name
 
+    def __eq__(self, other):
+        return self.name == other.name
+
+    def __repr__(self):
+        return '<VarReference(%s)>' % self.name
+
+
+class VarsStringsList(list):
+    """A list containing only VarReferences and strings."""
+
 
 class TemplateReader(object):
     """Reads a template file.
@@ -384,8 +466,7 @@ class TemplateReader(object):
 
     def __init__(self):
         self.doc = OrderedDict()
-        self.macros = {}
-        self.variables = {}
+        self.template_state = TemplateState()
 
     def load_string(self, s):
         """Load a template file from a string."""
@@ -401,16 +482,15 @@ class TemplateReader(object):
             def __init__(self, *args, **kwargs):
                 super(ReaderTemplateLoader, self).__init__(*args, **kwargs)
 
-                # Share these variables across all instances within this
-                # reader.
-                self.macros = reader.macros
-                self.variables = reader.variables
+                # Share the state across all instances within this reader.
+                self.template_state = reader.template_state
 
         for doc in yaml.load_all(s, Loader=ReaderTemplateLoader):
             if isinstance(doc, MacrosDoc):
-                self.macros.update(doc.__dict__)
+                self.template_state.macros.update(doc.__dict__)
             elif isinstance(doc, VariablesDoc):
-                self.variables.update(doc.__dict__)
+                doc_tree = self._resolve_variables(reader, doc)
+                self.template_state.variables.update(doc_tree)
             else:
                 self.doc.update(doc)
 
@@ -418,6 +498,19 @@ class TemplateReader(object):
         """Load a template file from disk."""
         with open(filename, 'r') as fp:
             self.load_string(fp.read())
+
+    def _resolve_variables(self, reader, doc):
+        prev_unresolved_vars = None
+
+        doc_tree = doc.__dict__
+
+        while prev_unresolved_vars != self.template_state.unresolved_variables:
+            doc_tree = self.template_state.resolve_variables_for_tree(
+                doc_tree, doc_tree)
+            prev_unresolved_vars = \
+                self.template_state.unresolved_variables.copy()
+
+        return doc_tree
 
 
 class TemplateCompiler(object):

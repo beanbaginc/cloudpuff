@@ -5,7 +5,8 @@ import shutil
 import tempfile
 from unittest import TestCase
 
-from cloudformer.templates import TemplateCompiler, TemplateReader
+from cloudformer.templates import (TemplateCompiler, TemplateReader,
+                                   VarReference)
 
 
 class TemplateCompilerTests(TestCase):
@@ -71,7 +72,7 @@ class TemplateReaderTests(TestCase):
     def test_embed_vars(self):
         """Testing TemplateReader with embedding $$variables"""
         reader = TemplateReader()
-        reader.variables['myvar'] = '123'
+        reader.template_state.variables['myvar'] = '123'
         reader.load_string('key: $$myvar')
 
         self.assertEqual(reader.doc['key'], '123')
@@ -79,7 +80,7 @@ class TemplateReaderTests(TestCase):
     def test_embed_vars_with_path(self):
         """Testing TemplateReader with embedding $$variables.with.paths"""
         reader = TemplateReader()
-        reader.variables['myvar'] = {
+        reader.template_state.variables['myvar'] = {
             'a': {
                 'b': '123'
             }
@@ -133,15 +134,28 @@ class TemplateReaderTests(TestCase):
     def test_process_strings_vars(self):
         """Testing TemplateReader with processing strings with $$variables"""
         reader = TemplateReader()
-        reader.variables['myvar'] = 'abc'
+        reader.template_state.variables['myvar'] = 'abc'
         reader.load_string('key: "foo - $$myvar - baz"')
 
         self.assertEqual(reader.doc['key'], 'foo - abc - baz')
 
+    def test_process_strings_unresolved_vars(self):
+        """Testing TemplateReader with processing strings with unresolved $$variables"""
+        reader = TemplateReader()
+        reader.load_string('key: "foo - $$myvar - baz"')
+
+        self.assertEqual(
+            reader.doc['key'],
+            [
+                'foo - ',
+                VarReference('myvar'),
+                ' - baz',
+            ])
+
     def test_process_strings_funcs(self):
         """Testing TemplateReader with processing strings with !!Functions"""
         reader = TemplateReader()
-        reader.variables['myvar'] = 'abc'
+        reader.template_state.variables['myvar'] = 'abc'
         reader.load_string('key: "foo - !!FindInMap(a, @@b, c) - baz"')
 
         self.assertEqual(
@@ -217,7 +231,7 @@ class TemplateReaderTests(TestCase):
 
         self.assertEqual(reader.doc, {})
         self.assertEqual(
-            reader.macros['macro1'],
+            reader.template_state.macros['macro1'],
             {
                 'content': {
                     'key': 'value'
@@ -233,8 +247,23 @@ class TemplateReaderTests(TestCase):
             'var2: value2\n')
 
         self.assertEqual(reader.doc, {})
-        self.assertEqual(reader.variables['var1'], 'value1')
-        self.assertEqual(reader.variables['var2'], 'value2')
+        self.assertEqual(reader.template_state.variables['var1'], 'value1')
+        self.assertEqual(reader.template_state.variables['var2'], 'value2')
+
+    def test_doc_vars_with_refs_in_doc(self):
+        """Testing TemplateReader with '--- !vars' document with variable references within the document"""
+        reader = TemplateReader()
+        reader.load_string(
+            '--- !vars\n'
+            'var1: value1\n'
+            'var2: $${var1}-foo\n'
+            'var3: $${var2}bar\n')
+
+        variables = reader.template_state.variables
+        self.assertEqual(reader.doc, {})
+        self.assertEqual(variables['var1'], 'value1')
+        self.assertEqual(variables['var2'], 'value1-foo')
+        self.assertEqual(variables['var3'], 'value1-foobar')
 
     def test_statement_tags(self):
         """Testing TemplateReader with !tags"""
@@ -356,12 +385,12 @@ class TemplateReaderTests(TestCase):
                 % filename)
 
             self.assertEqual(
-                reader.variables,
+                reader.template_state.variables,
                 {
                     'var1': 'value1'
                 })
             self.assertEqual(
-                reader.macros,
+                reader.template_state.macros,
                 {
                     'macro1': {
                         'content': {

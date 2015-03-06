@@ -111,6 +111,288 @@ class TemplateReaderTests(TestCase):
                 ]
             })
 
+    def test_embed_funcs_with_if(self):
+        """Testing TemplateReader with embedding !!If"""
+        reader = TemplateReader()
+        reader.load_string(
+            'key: |\n'
+            '    !!If(a) {\n'
+            '    the line.\n'
+            '    !!}')
+
+        self.assertEqual(
+            reader.doc['key'],
+            {
+                'Fn::If': [
+                    'a',
+                    'the line.\n'
+                ]
+            })
+
+    def test_embed_funcs_with_if_vars_in_params(self):
+        """Testing TemplateReader with embedding !!If and variables in params"""
+        reader = TemplateReader()
+        reader.template_state.variables['myvar'] = '123'
+        reader.load_string(
+            'key: |\n'
+            '    !!If($$myvar) {\n'
+            '    the line.\n'
+            '    !!}')
+
+        self.assertEqual(
+            reader.doc['key'],
+            {
+                'Fn::If': [
+                    '123',
+                    'the line.\n'
+                ]
+            })
+
+    def test_embed_funcs_with_if_vars_in_content(self):
+        """Testing TemplateReader with embedding !!If and variables in content"""
+        reader = TemplateReader()
+        reader.template_state.variables['myvar'] = '123'
+        reader.load_string(
+            'key: |\n'
+            '    !!If(a) {\n'
+            '    this is $$myvar.\n'
+            '    !!}')
+
+        self.assertEqual(
+            reader.doc['key'],
+            {
+                'Fn::If': [
+                    'a',
+                    'this is 123.\n',
+                ]
+            })
+
+    def test_embed_funcs_with_if_refs_in_params(self):
+        """Testing TemplateReader with embedding !!If and references in params"""
+        reader = TemplateReader()
+        reader.load_string(
+            'key: |\n'
+            '    !!If(@@MyResource) {\n'
+            '    the line.\n'
+            '    !!}')
+
+        self.assertEqual(
+            reader.doc['key'],
+            {
+                'Fn::If': [
+                    {
+                        'Ref': 'MyResource'
+                    },
+                    'the line.\n'
+                ]
+            })
+
+    def test_embed_funcs_with_if_refs_in_content(self):
+        """Testing TemplateReader with embedding !!If and references in content"""
+        reader = TemplateReader()
+        reader.template_state.variables['myvar'] = '123'
+        reader.load_string(
+            'key: |\n'
+            '    !!If(a) {\n'
+            '    this is @@MyResource.\n'
+            '    !!}')
+
+        self.assertEqual(
+            reader.doc['key'],
+            {
+                'Fn::If': [
+                    'a',
+                    {
+                        'Fn::Join': [
+                            '',
+                            [
+                                'this is ',
+                                {
+                                    'Ref': 'MyResource',
+                                },
+                                '.\n'
+                            ]
+                        ]
+                    }
+                ]
+            })
+
+    def test_embed_funcs_with_if_multiple_lines(self):
+        """Testing TemplateReader with embedding !!If and multiple lines"""
+        reader = TemplateReader()
+        reader.load_string(
+            'key: |\n'
+            '    !!If(a) {\n'
+            '    a couple of\n'
+            '    lines of content.\n'
+            '    !!}')
+
+        self.assertEqual(
+            reader.doc['key'],
+            {
+                'Fn::If': [
+                    'a',
+                    {
+                        'Fn::Join': [
+                            '',
+                            [
+                                'a couple of\n',
+                                'lines of content.\n',
+                            ],
+                        ],
+                    }
+                ]
+            })
+
+    def test_embed_funcs_with_if_else(self):
+        """Testing TemplateReader with embedding !!If and !!Else"""
+        reader = TemplateReader()
+        reader.load_string(
+            'key: |\n'
+            '    !!If(a) {\n'
+            '    true_value\n'
+            '    !!Else {\n'
+            '    false_value\n'
+            '    !!}')
+
+        self.assertEqual(
+            reader.doc['key'],
+            {
+                'Fn::If': [
+                    'a',
+                    'true_value\n',
+                    'false_value\n',
+                ]
+            })
+
+    def test_embed_funcs_with_if_elseif(self):
+        """Testing TemplateReader with embedding !!If and !!ElseIf"""
+        reader = TemplateReader()
+        reader.load_string(
+            'key: |\n'
+            '    !!If(a) {\n'
+            '    value1\n'
+            '    !!ElseIf(b) {\n'
+            '    value2\n'
+            '    !!}')
+
+        self.assertEqual(
+            reader.doc['key'],
+            {
+                'Fn::If': [
+                    'a',
+                    'value1\n',
+                    {
+                        'Fn::If': [
+                            'b',
+                            'value2\n',
+                        ]
+                    }
+                ]
+            })
+
+    def test_embed_funcs_with_if_elseif_else(self):
+        """Testing TemplateReader with embedding !!If, !!ElseIf, !!Else"""
+        reader = TemplateReader()
+        reader.load_string(
+            'key: |\n'
+            '    !!If(a) {\n'
+            '    value1\n'
+            '    !!ElseIf(b) {\n'
+            '    value2\n'
+            '    !!Else {\n'
+            '    value3\n'
+            '    !!}')
+
+        self.assertEqual(
+            reader.doc['key'],
+            {
+                'Fn::If': [
+                    'a',
+                    'value1\n',
+                    {
+                        'Fn::If': [
+                            'b',
+                            'value2\n',
+                            'value3\n',
+                        ]
+                    }
+                ]
+            })
+
+    def test_embed_funcs_with_if_elseif_elseif_else(self):
+        """Testing TemplateReader with embedding !!If, !!ElseIf, !!ElseIf, !!Else"""
+        reader = TemplateReader()
+        reader.load_string(
+            'key: |\n'
+            '    !!If(a) {\n'
+            '    value1\n'
+            '    !!ElseIf(b) {\n'
+            '    value2\n'
+            '    !!ElseIf(c) {\n'
+            '    value3\n'
+            '    !!Else {\n'
+            '    value4\n'
+            '    !!}')
+
+        self.assertEqual(
+            reader.doc['key'],
+            {
+                'Fn::If': [
+                    'a',
+                    'value1\n',
+                    {
+                        'Fn::If': [
+                            'b',
+                            'value2\n',
+                            {
+                                'Fn::If': [
+                                    'c',
+                                    'value3\n',
+                                    'value4\n',
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            })
+
+    def test_embed_funcs_with_if_nested(self):
+        """Testing TemplateReader with embedding nested !!If statements"""
+        reader = TemplateReader()
+        reader.load_string(
+            'key: |\n'
+            '    !!If(a) {\n'
+            '    Line 1.\n'
+            '    !!If(b) {\n'
+            '    Line 2.\n'
+            '    !!}\n'
+            '    Line 3.\n'
+            '    !!}')
+
+        self.assertEqual(
+            reader.doc['key'],
+            {
+                'Fn::If': [
+                    'a',
+                    {
+                        'Fn::Join': [
+                            '',
+                            [
+                                'Line 1.\n',
+                                {
+                                    'Fn::If': [
+                                        'b',
+                                        'Line 2.\n'
+                                    ]
+                                },
+                                'Line 3.\n'
+                            ]
+                        ]
+                    }
+                ]
+            })
+
     def test_embed_vars_in_keys(self):
         """Testing TemplateReader with embedding $$variables in keys"""
         reader = TemplateReader()
@@ -369,7 +651,7 @@ class TemplateReaderTests(TestCase):
         self.assertEqual(reader.doc['key2'], 'hello')
 
     def test_statement_import(self):
-        """Testing TemplateLoader with !import"""
+        """Testing TemplateReader with !import"""
         tempdir = tempfile.mkdtemp(prefix='cloudformer-tests')
         filename = os.path.join(tempdir, 'defs.yaml')
 

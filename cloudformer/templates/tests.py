@@ -5,8 +5,8 @@ import shutil
 import tempfile
 from unittest import TestCase
 
-from cloudformer.templates import (TemplateCompiler, TemplateReader,
-                                   VarReference)
+from cloudformer.templates import TemplateCompiler, TemplateReader
+from cloudformer.templates.state import VarReference
 
 
 class TemplateCompilerTests(TestCase):

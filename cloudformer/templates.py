@@ -154,7 +154,7 @@ class TemplateLoader(yaml.Loader):
     * Any "@@MyRefName" strings found in any values will be expanded
       into { "Ref": "MyRefName" }.
 
-    * Any "!!MyFuncName(...)" strings found in any values will be expanded
+    * Any "<% MyFuncName(...) %>" strings found in any values will be expanded
       into { "Fn::MyFuncName": { ... } }.
 
     * Any "$$MyVarName" strings found in any values will be expanded into
@@ -487,7 +487,7 @@ class IfBlockFunction(BlockFunction):
         """
         if self._is_elseif and not isinstance(stack.current, IfBlockFunction):
             raise ConstructorError(
-                'Found !!ElseIf without a matching !!If or !!ElseIf')
+                'Found ElseIf without a matching If or ElseIf')
 
     def add_content(self, content):
         """Add content to the if statement.
@@ -503,11 +503,11 @@ class IfBlockFunction(BlockFunction):
             if content.func_name in ('Else', 'ElseIf'):
                 if not self._if_true_content:
                     raise ConstructorError(
-                        'Found !!%s without a "true" value in the !!If'
+                        'Found %s without a "true" value in the If'
                         % content.func_name)
                 elif self._if_false_content:
                     raise ConstructorError(
-                        'Found !!%s after an !!Else'
+                        'Found %s after an Else'
                         % content.func_name)
 
                 self._cur_content = self._if_false_content
@@ -567,7 +567,7 @@ class ElseBlockFunction(BlockFunction):
         This will ensure that the Else block is within an If block.
         """
         if not isinstance(stack.current, IfBlockFunction):
-            raise ConstructorError('Found !!Else without a matching !!If')
+            raise ConstructorError('Found Else without a matching If')
 
 
 class StringParser(object):
@@ -577,12 +577,12 @@ class StringParser(object):
         r'('
 
         # CloudFormation functions, optionally with opening blocks
-        r'!!(?P<func_name>[A-Za-z]+)\s*'
-        r'(\((?P<params>(((@@|\$\$)?[A-Za-z0-9:_]+)(,\s*)?)+)\))?'
-        r'(?P<func_open>\s*{\n?)?'
+        r'<%\s*(?P<func_name>[A-Za-z]+)\s*'
+        r'(\((?P<params>([^)]+))\))?'
+        r'(?P<func_open>\s*{)?\s*%>\n?'
 
         # Closing braces for block-level CloudFormation functions
-        r'|(?P<func_close>!!})\n?'
+        r'|(?P<func_close><%\s*}\s*%>)\n?'
 
         # Resource/Parameter references
         r'|@@(?P<ref_brace>{)?(?P<ref_name>[A-Za-z0-9:_]+)(?(ref_brace)})'
@@ -655,7 +655,7 @@ class StringParser(object):
         Any substrings starting with "@@" will be turned into a
         { "Ref": "<name>" } mapping.
 
-        Any substrings starting with "!!" will be turned into a
+        Any substrings contained within "<% ... %>" will be turned into a
         { "Fn::<name>": { ... } } mapping.
 
         Any substrings starting with "$$" will be resolved into a variable's

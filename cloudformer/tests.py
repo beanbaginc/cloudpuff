@@ -97,9 +97,9 @@ class TemplateReaderTests(TestCase):
         self.assertEqual(reader.doc['key'], '123')
 
     def test_embed_funcs(self):
-        """Testing TemplateReader with embedding !!Functions"""
+        """Testing TemplateReader with embedding <% Functions %>"""
         reader = TemplateReader()
-        reader.load_string('key: "!!FindInMap(a, @@b, c)"')
+        reader.load_string('key: <% FindInMap(a, @@b, c) %>')
 
         self.assertEqual(
             reader.doc['key'],
@@ -112,13 +112,13 @@ class TemplateReaderTests(TestCase):
             })
 
     def test_embed_funcs_with_if(self):
-        """Testing TemplateReader with embedding !!If"""
+        """Testing TemplateReader with embedding <% If %>"""
         reader = TemplateReader()
         reader.load_string(
             'key: |\n'
-            '    !!If(a) {\n'
+            '    <% If (a) { %>\n'
             '    the line.\n'
-            '    !!}')
+            '    <% } %>')
 
         self.assertEqual(
             reader.doc['key'],
@@ -130,14 +130,14 @@ class TemplateReaderTests(TestCase):
             })
 
     def test_embed_funcs_with_if_vars_in_params(self):
-        """Testing TemplateReader with embedding !!If and variables in params"""
+        """Testing TemplateReader with embedding <% If %> and variables in params"""
         reader = TemplateReader()
         reader.template_state.variables['myvar'] = '123'
         reader.load_string(
             'key: |\n'
-            '    !!If($$myvar) {\n'
+            '    <% If ($$myvar) { %>\n'
             '    the line.\n'
-            '    !!}')
+            '    <% } %>')
 
         self.assertEqual(
             reader.doc['key'],
@@ -149,14 +149,14 @@ class TemplateReaderTests(TestCase):
             })
 
     def test_embed_funcs_with_if_vars_in_content(self):
-        """Testing TemplateReader with embedding !!If and variables in content"""
+        """Testing TemplateReader with embedding <% If %> and variables in content"""
         reader = TemplateReader()
         reader.template_state.variables['myvar'] = '123'
         reader.load_string(
             'key: |\n'
-            '    !!If(a) {\n'
+            '    <% If (a) { %>\n'
             '    this is $$myvar.\n'
-            '    !!}')
+            '    <% } %>')
 
         self.assertEqual(
             reader.doc['key'],
@@ -168,13 +168,13 @@ class TemplateReaderTests(TestCase):
             })
 
     def test_embed_funcs_with_if_refs_in_params(self):
-        """Testing TemplateReader with embedding !!If and references in params"""
+        """Testing TemplateReader with embedding <% If %> and references in params"""
         reader = TemplateReader()
         reader.load_string(
             'key: |\n'
-            '    !!If(@@MyResource) {\n'
+            '    <% If (@@MyResource) { %>\n'
             '    the line.\n'
-            '    !!}')
+            '    <% } %>')
 
         self.assertEqual(
             reader.doc['key'],
@@ -188,14 +188,14 @@ class TemplateReaderTests(TestCase):
             })
 
     def test_embed_funcs_with_if_refs_in_content(self):
-        """Testing TemplateReader with embedding !!If and references in content"""
+        """Testing TemplateReader with embedding <% If %> and references in content"""
         reader = TemplateReader()
         reader.template_state.variables['myvar'] = '123'
         reader.load_string(
             'key: |\n'
-            '    !!If(a) {\n'
+            '    <% If (a) { %>\n'
             '    this is @@MyResource.\n'
-            '    !!}')
+            '    <% } %>')
 
         self.assertEqual(
             reader.doc['key'],
@@ -218,14 +218,14 @@ class TemplateReaderTests(TestCase):
             })
 
     def test_embed_funcs_with_if_multiple_lines(self):
-        """Testing TemplateReader with embedding !!If and multiple lines"""
+        """Testing TemplateReader with embedding <% If %> and multiple lines"""
         reader = TemplateReader()
         reader.load_string(
             'key: |\n'
-            '    !!If(a) {\n'
+            '    <% If (a) { %>\n'
             '    a couple of\n'
             '    lines of content.\n'
-            '    !!}')
+            '    <% } %>')
 
         self.assertEqual(
             reader.doc['key'],
@@ -245,15 +245,15 @@ class TemplateReaderTests(TestCase):
             })
 
     def test_embed_funcs_with_if_else(self):
-        """Testing TemplateReader with embedding !!If and !!Else"""
+        """Testing TemplateReader with embedding <% If %> and <% Else %>"""
         reader = TemplateReader()
         reader.load_string(
             'key: |\n'
-            '    !!If(a) {\n'
+            '    <% If (a) { %>\n'
             '    true_value\n'
-            '    !!Else {\n'
+            '    <% Else { %>\n'
             '    false_value\n'
-            '    !!}')
+            '    <% } %>')
 
         self.assertEqual(
             reader.doc['key'],
@@ -266,15 +266,15 @@ class TemplateReaderTests(TestCase):
             })
 
     def test_embed_funcs_with_if_elseif(self):
-        """Testing TemplateReader with embedding !!If and !!ElseIf"""
+        """Testing TemplateReader with embedding <% If %> and <% ElseIf %>"""
         reader = TemplateReader()
         reader.load_string(
             'key: |\n'
-            '    !!If(a) {\n'
+            '    <% If (a) { %>\n'
             '    value1\n'
-            '    !!ElseIf(b) {\n'
+            '    <% ElseIf (b) { %>\n'
             '    value2\n'
-            '    !!}')
+            '    <% } %>')
 
         self.assertEqual(
             reader.doc['key'],
@@ -292,17 +292,17 @@ class TemplateReaderTests(TestCase):
             })
 
     def test_embed_funcs_with_if_elseif_else(self):
-        """Testing TemplateReader with embedding !!If, !!ElseIf, !!Else"""
+        """Testing TemplateReader with embedding <% If %>, <% ElseIf %>, <% Else %>"""
         reader = TemplateReader()
         reader.load_string(
             'key: |\n'
-            '    !!If(a) {\n'
+            '    <% If (a) { %>\n'
             '    value1\n'
-            '    !!ElseIf(b) {\n'
+            '    <% ElseIf (b) { %>\n'
             '    value2\n'
-            '    !!Else {\n'
+            '    <% Else { %>\n'
             '    value3\n'
-            '    !!}')
+            '    <% } %>')
 
         self.assertEqual(
             reader.doc['key'],
@@ -321,19 +321,19 @@ class TemplateReaderTests(TestCase):
             })
 
     def test_embed_funcs_with_if_elseif_elseif_else(self):
-        """Testing TemplateReader with embedding !!If, !!ElseIf, !!ElseIf, !!Else"""
+        """Testing TemplateReader with embedding <% If %>, <% ElseIf %>, <% ElseIf %>, <% Else %>"""
         reader = TemplateReader()
         reader.load_string(
             'key: |\n'
-            '    !!If(a) {\n'
+            '    <% If (a) { %>\n'
             '    value1\n'
-            '    !!ElseIf(b) {\n'
+            '    <% ElseIf (b) { %>\n'
             '    value2\n'
-            '    !!ElseIf(c) {\n'
+            '    <% ElseIf (c) { %>\n'
             '    value3\n'
-            '    !!Else {\n'
+            '    <% Else { %>\n'
             '    value4\n'
-            '    !!}')
+            '    <% } %>')
 
         self.assertEqual(
             reader.doc['key'],
@@ -358,17 +358,17 @@ class TemplateReaderTests(TestCase):
             })
 
     def test_embed_funcs_with_if_nested(self):
-        """Testing TemplateReader with embedding nested !!If statements"""
+        """Testing TemplateReader with embedding nested <% If %> statements"""
         reader = TemplateReader()
         reader.load_string(
             'key: |\n'
-            '    !!If(a) {\n'
+            '    <% If (a) { %>\n'
             '    Line 1.\n'
-            '    !!If(b) {\n'
+            '    <%   If (b) { %>\n'
             '    Line 2.\n'
-            '    !!}\n'
+            '    <%   } %>\n'
             '    Line 3.\n'
-            '    !!}')
+            '    <% } %>')
 
         self.assertEqual(
             reader.doc['key'],
@@ -442,10 +442,10 @@ class TemplateReaderTests(TestCase):
             ])
 
     def test_process_strings_funcs(self):
-        """Testing TemplateReader with processing strings with !!Functions"""
+        """Testing TemplateReader with processing strings with <% Functions %>"""
         reader = TemplateReader()
         reader.template_state.variables['myvar'] = 'abc'
-        reader.load_string('key: "foo - !!FindInMap(a, @@b, c) - baz"')
+        reader.load_string('key: foo - <% FindInMap(a, @@b, c) %> - baz')
 
         self.assertEqual(
             reader.doc['key'],

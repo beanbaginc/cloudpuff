@@ -63,6 +63,8 @@ class TemplateState(object):
             if (isinstance(node_value, VarsStringsList) and
                 all([isinstance(item, basestring) for item in value])):
                 value = ''.join(value)
+            elif isinstance(node_value, UncollapsibleList):
+                value = UncollapsibleList(value)
 
             return value
         elif resolve_variables and isinstance(node_value, VarReference):

@@ -4,8 +4,27 @@ import re
 
 from yaml.constructor import ConstructorError
 
+from cloudformer.templates.expression_parser import ExpressionParser
 from cloudformer.templates.state import (UncollapsibleList, VarReference,
                                          VarsStringsList)
+
+
+# CloudFormation functions, optionally with opening blocks
+FUNC_RE = re.compile(
+    r'<%\s*(?P<func_name>[A-Za-z]+)\s*'
+    r'(\((?P<params>(.+))\))?'
+    r'(?P<func_open>\s*{)?\s*%>\n?')
+
+# Closing braces for block-level CloudFormation functions
+CLOSE_FUNC_RE = re.compile(r'(?P<func_close><%\s*}\s*%>)\n?')
+
+# Resource/Parameter references
+REFERENCE_RE = re.compile(
+    r'@@(?P<ref_brace>{)?(?P<ref_name>[A-Za-z0-9:_]+)(?(ref_brace)})')
+
+# Template variables
+VARIABLE_RE = re.compile(
+    r'\$\$((?P<var_name>[A-Za-z0-9_]+)|{(?P<var_path>[A-Za-z0-9_.]+)})')
 
 
 class StringParserStack(list):
@@ -104,6 +123,22 @@ class StringParserStackItem(object):
 class Function(StringParserStackItem):
     """A CloudFormation function call appearing in a string."""
 
+    PARAMS_RE = re.compile(',\s*')
+
+    @classmethod
+    def parse_params(cls, params_str, process_string_func):
+        """Parse the parameters for the function.
+
+        By default, this splits the parameters by comma, and converts them
+        into a list, with each value processed as a templated string.
+
+        Subclasses can override this to provide custom behavior.
+        """
+        return [
+            process_string_func(value)
+            for value in cls.PARAMS_RE.split(params_str)
+        ]
+
     def __init__(self, func_name, params=None, **kwargs):
         super(Function, self).__init__(**kwargs)
 
@@ -160,6 +195,60 @@ class IfBlockFunction(BlockFunction):
     statements. These all get turned into a tree of CloudFormation If
     statements.
     """
+
+    EXPR_RE = re.compile('(%s)' % '|'.join([
+        r'\(',
+        r'\)',
+        r'\|\|',
+        r'&&',
+        r'==',
+        r'!=',
+        '"[^"]+"',
+        "'[^']+'",
+        '[A-Za-z0-9_]+',
+        REFERENCE_RE.pattern,
+        VARIABLE_RE.pattern,
+    ]))
+
+    EXPR_OPS = {
+        '||': (1, 'LEFT'),
+        '&&': (2, 'LEFT'),
+        '==': (3, 'LEFT'),
+        '!=': (3, 'LEFT'),
+    }
+
+    @classmethod
+    def parse_params(cls, params_str, process_string_func):
+        """Parse a conditional expression in the parameters.
+
+        The if statement's parameters may be a valid conditional expression,
+        which will be parsed and turned into a series of CloudFormation
+        operator expressions. This allows for complex logic in conditionals.
+        """
+        def _process_op(op, lhs, rhs):
+            if op == '||':
+                return {
+                    'Fn::Or': UncollapsibleList([lhs, rhs]),
+                }
+            elif op == '&&':
+                return {
+                    'Fn::And': UncollapsibleList([lhs, rhs]),
+                }
+            elif op == '==':
+                return {
+                    'Fn::Equals': UncollapsibleList([lhs, rhs]),
+                }
+            elif op == '!=':
+                return {
+                    'Fn::Not': [{
+                        'Fn::Equals': UncollapsibleList([lhs, rhs]),
+                    }]
+                }
+
+        tokenizer = ExpressionParser(cls.EXPR_RE, cls.EXPR_OPS,
+                                     process_string_func, _process_op)
+
+        return [tokenizer.parse(params_str)]
 
     def __init__(self, *args, **kwargs):
         super(IfBlockFunction, self).__init__(*args, **kwargs)
@@ -263,26 +352,12 @@ class ElseBlockFunction(BlockFunction):
 class StringParser(object):
     """Parses a string for functions, variables, and references."""
 
-    PARSE_STR_RE = re.compile(
-        r'('
-
-        # CloudFormation functions, optionally with opening blocks
-        r'<%\s*(?P<func_name>[A-Za-z]+)\s*'
-        r'(\((?P<params>([^)]+))\))?'
-        r'(?P<func_open>\s*{)?\s*%>\n?'
-
-        # Closing braces for block-level CloudFormation functions
-        r'|(?P<func_close><%\s*}\s*%>)\n?'
-
-        # Resource/Parameter references
-        r'|@@(?P<ref_brace>{)?(?P<ref_name>[A-Za-z0-9:_]+)(?(ref_brace)})'
-
-        # Template variables
-        r'|\$\$((?P<var_name>[A-Za-z0-9_]+)|{(?P<var_path>[A-Za-z0-9_.]+)})'
-
-        r')')
-
-    FUNC_PARAM_RE = re.compile(',\s*')
+    PARSE_STR_RE = re.compile('(%s)' % '|'.join([
+        FUNC_RE.pattern,
+        CLOSE_FUNC_RE.pattern,
+        REFERENCE_RE.pattern,
+        VARIABLE_RE.pattern,
+    ]))
 
     FUNCTIONS = {
         'If': IfBlockFunction,
@@ -406,21 +481,18 @@ class StringParser(object):
         """
         func_name = groups['func_name']
         params = groups['params']
-        cur_stack = stack.current
+
+        cls = self.FUNCTIONS.get(func_name, BlockFunction)
 
         if params:
-            norm_params = [
-                self._parse_line(value)
-                for value in self.FUNC_PARAM_RE.split(params)
-            ]
+            norm_params = cls.parse_params(params, self._parse_line)
         else:
             norm_params = []
 
-        cls = self.FUNCTIONS.get(func_name, BlockFunction)
         func = cls(func_name, norm_params, stack=stack)
         func.validate(stack)
 
-        can_push = cur_stack.add_content(func)
+        can_push = stack.current.add_content(func)
 
         if can_push and groups['func_open']:
             stack.push(func)

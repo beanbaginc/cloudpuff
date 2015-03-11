@@ -362,7 +362,7 @@ class TemplateReaderTests(TestCase):
         reader = TemplateReader()
         reader.load_string(
             'key: |\n'
-            '    <% If (a) { %>\n'
+            '    <% If (@@a) { %>\n'
             '    Line 1.\n'
             '    <%   If (b) { %>\n'
             '    Line 2.\n'
@@ -374,7 +374,9 @@ class TemplateReaderTests(TestCase):
             reader.doc['key'],
             {
                 'Fn::If': [
-                    'a',
+                    {
+                        'Ref': 'a',
+                    },
                     {
                         'Fn::Join': [
                             '',
@@ -390,6 +392,143 @@ class TemplateReaderTests(TestCase):
                             ]
                         ]
                     }
+                ]
+            })
+
+    def test_embed_funcs_with_if_equals(self):
+        """Testing TemplateReader with embedding <% If (lhs == rhs) %>"""
+        reader = TemplateReader()
+        reader.load_string(
+            'key: |\n'
+            '    <% If (a == b) { %>\n'
+            '    the line.\n'
+            '    <% } %>')
+
+        self.assertEqual(
+            reader.doc['key'],
+            {
+                'Fn::If': [
+                    {
+                        'Fn::Equals': ['a', 'b'],
+                    },
+                    'the line.\n'
+                ]
+            })
+
+    def test_embed_funcs_with_if_equals_refs(self):
+        """Testing TemplateReader with embedding <% If (@@lhs == rhs) %>"""
+        reader = TemplateReader()
+        reader.load_string(
+            'key: |\n'
+            '    <% If (@@a == b) { %>\n'
+            '    the line.\n'
+            '    <% } %>')
+
+        self.assertEqual(
+            reader.doc['key'],
+            {
+                'Fn::If': [
+                    {
+                        'Fn::Equals': [
+                            { 'Ref': 'a' },
+                            'b'
+                        ],
+                    },
+                    'the line.\n'
+                ]
+            })
+
+    def test_embed_funcs_with_if_equals_vars(self):
+        """Testing TemplateReader with embedding <% If ($$lhs == rhs) %>"""
+        reader = TemplateReader()
+        reader.template_state.variables['a'] = '123'
+        reader.load_string(
+            'key: |\n'
+            '    <% If ($$a == b) { %>\n'
+            '    the line.\n'
+            '    <% } %>')
+
+        self.assertEqual(
+            reader.doc['key'],
+            {
+                'Fn::If': [
+                    {
+                        'Fn::Equals': [
+                            '123',
+                            'b'
+                        ],
+                    },
+                    'the line.\n'
+                ]
+            })
+
+    def test_embed_funcs_with_if_not_equals(self):
+        """Testing TemplateReader with embedding <% If (lhs != rhs) %>"""
+        reader = TemplateReader()
+        reader.load_string(
+            'key: |\n'
+            '    <% If (a != b) { %>\n'
+            '    the line.\n'
+            '    <% } %>')
+
+        self.assertEqual(
+            reader.doc['key'],
+            {
+                'Fn::If': [
+                    {
+                        'Fn::Not': [{
+                            'Fn::Equals': ['a', 'b'],
+                        }]
+                    },
+                    'the line.\n'
+                ]
+            })
+
+    def test_embed_funcs_with_if_complex(self):
+        """Testing TemplateReader with embedding complex <% If %>"""
+        reader = TemplateReader()
+        reader.template_state.variables['v'] = 'value'
+        reader.load_string(
+            'key: |\n'
+            '    <% If ((i != 1 || s == "foo bar") && '
+            '           @@r == 3 || $$v == true) { %>\n'
+            '    the line.\n'
+            '    <% } %>')
+
+        self.assertEqual(
+            reader.doc['key'],
+            {
+                'Fn::If': [
+                    {
+                        'Fn::Or': [
+                            {
+                                'Fn::And': [
+                                    {
+                                        'Fn::Or': [
+                                            {
+                                                'Fn::Not': [{
+                                                    'Fn::Equals': ['i', '1'],
+                                                }],
+                                            },
+                                            {
+                                                'Fn::Equals': ['s', 'foo bar'],
+                                            }
+                                        ],
+                                    },
+                                    {
+                                        'Fn::Equals': [
+                                            { 'Ref': 'r' },
+                                            '3',
+                                        ]
+                                    }
+                                ]
+                            },
+                            {
+                                'Fn::Equals': ['value', 'true'],
+                            }
+                        ]
+                    },
+                    'the line.\n'
                 ]
             })
 

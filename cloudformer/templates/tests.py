@@ -532,6 +532,106 @@ class TemplateReaderTests(TestCase):
                 ]
             })
 
+    def test_embed_funcs_with_get_att(self):
+        """Testing TemplateReader with embedding GetAtt"""
+        reader = TemplateReader()
+        reader.load_string(
+            'key: <% GetAtt("MyResource", "MyProperty") %>')
+
+        self.assertEqual(
+            reader.doc['key'],
+            {
+                'Fn::GetAtt': ['MyResource', 'MyProperty'],
+            })
+
+    def test_embed_funcs_with_get_att_with_refs(self):
+        """Testing TemplateReader with embedding GetAtt with @@References"""
+        reader = TemplateReader()
+        reader.load_string(
+            'key: <% GetAtt("MyResource", @@MyProperty) %>')
+
+        self.assertEqual(
+            reader.doc['key'],
+            {
+                'Fn::GetAtt': [
+                    'MyResource',
+                    {
+                        'Ref': 'MyProperty'
+                    },
+                ]
+            })
+
+    def test_embed_funcs_with_get_azs(self):
+        """Testing TemplateReader with embedding GetAZs()"""
+        reader = TemplateReader()
+        reader.load_string(
+            'key: <% GetAZs() %>')
+
+        self.assertEqual(
+            reader.doc['key'],
+            {
+                'Fn::GetAZs': ''
+            })
+
+    def test_embed_funcs_with_get_azs_with_region(self):
+        """Testing TemplateReader with embedding GetAZs() with a region"""
+        reader = TemplateReader()
+        reader.load_string(
+            'key: <% GetAZs("us-east-1") %>')
+
+        self.assertEqual(
+            reader.doc['key'],
+            {
+                'Fn::GetAZs': 'us-east-1'
+            })
+
+    def test_embed_funcs_with_get_azs_with_refs(self):
+        """Testing TemplateReader with embedding GetAZs() with @@References"""
+        reader = TemplateReader()
+        reader.load_string(
+            'key: <% GetAZs(@@MyReference) %>')
+
+        self.assertEqual(
+            reader.doc['key'],
+            {
+                'Fn::GetAZs': {
+                    'Ref': 'MyReference',
+                }
+            })
+
+    def test_embed_funcs_with_select_and_array(self):
+        """Testing TemplateReader with embedding Select() with arrays"""
+        reader = TemplateReader()
+        reader.template_state.variables['myvar'] = 'abc'
+        reader.load_string(
+            'key: <% Select(2, ["foo \'bar\'", \'"foo" bar\', $$myvar]) %>')
+
+        self.assertEqual(
+            reader.doc['key'],
+            {
+                'Fn::Select': [
+                    '2',
+                    ["foo 'bar'", '"foo" bar', 'abc']
+                ]
+            })
+
+    def test_embed_funcs_with_select_and_refs(self):
+        """Testing TemplateReader with embedding Select() with @@References"""
+        reader = TemplateReader()
+        reader.load_string(
+            'key: <% Select(2, @@MyReference) %>')
+
+        self.assertEqual(
+            reader.doc['key'],
+            {
+                'Fn::Select': [
+                    '2',
+                    {
+                        'Ref': 'MyReference',
+                    }
+                ]
+            })
+
     def test_embed_vars_in_keys(self):
         """Testing TemplateReader with embedding $$variables in keys"""
         reader = TemplateReader()

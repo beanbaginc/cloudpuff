@@ -12,7 +12,7 @@ from cloudformer.templates.state import (UncollapsibleList, VarReference,
 # CloudFormation functions, optionally with opening blocks
 FUNC_RE = re.compile(
     r'<%\s*(?P<func_name>[A-Za-z]+)\s*'
-    r'(\((?P<params>(.+))\))?'
+    r'(\((?P<params>(.*))\))?'
     r'(?P<func_open>\s*{)?\s*%>\n?')
 
 # Closing braces for block-level CloudFormation functions
@@ -134,8 +134,11 @@ class Function(StringParserStackItem):
 
         Subclasses can override this to provide custom behavior.
         """
+        if not params_str:
+            return []
+
         return [
-            process_string_func(value)
+            process_string_func(strip_quotes(value))
             for value in cls.PARAMS_RE.split(params_str)
         ]
 
@@ -143,7 +146,11 @@ class Function(StringParserStackItem):
         super(Function, self).__init__(**kwargs)
 
         self.func_name = func_name
-        self.params = params or []
+
+        if params is None:
+            self.params = []
+        else:
+            self.params = params
 
     def validate(self, stack):
         """Validates the function's placement in the current stack."""
@@ -349,6 +356,75 @@ class ElseBlockFunction(BlockFunction):
             raise ConstructorError('Found Else without a matching If')
 
 
+class GetAZsFunction(Function):
+    """A wrapper around Fn::GetAZs, for getting availability zones."""
+
+    @classmethod
+    def parse_params(cls, params_str, process_string_func):
+        """Parse the parameters to the GetAZs function.
+
+        Unlike most functions, GetAZs does not take a list of arguments,
+        but rather takes a single argument. This processes the parameters
+        as a single argument.
+        """
+        params = Function.parse_params(params_str, process_string_func)
+
+        if len(params) > 1:
+            raise ConstructorError('Too many parameters passed to GetAZs')
+        elif len(params) == 1:
+            return params[0]
+        else:
+            return ''
+
+
+class SelectFunction(Function):
+    """A wrapper around Fn::Select, for indexing into a list."""
+
+    SELECT_PARAMS_RE = re.compile(
+        r'^(?P<index>\d+),\s*'
+        r'(\[(?P<array>.+)\]|' + REFERENCE_RE.pattern + ')$')
+
+    ARRAY_ITEM_RE = re.compile('(%s)' % '|'.join([
+        '"[^"]+"',
+        "'[^']+'",
+        VARIABLE_RE.pattern,
+    ]))
+
+    @classmethod
+    def parse_params(cls, params_str, process_string_func):
+        """Parse the parameters to the Select function.
+
+        This handles the two cases supported by Fn::Select: Specifying an
+        index and an array of values, or specifying an index and a reference.
+        """
+        m = cls.SELECT_PARAMS_RE.match(params_str)
+
+        if not m:
+            raise ConstructorError(
+                'Cannot parse parameters to Select function: "%s"'
+                % params_str)
+
+        index = m.group('index')
+        array = m.group('array')
+
+        if array:
+            return [
+                index,
+                UncollapsibleList([
+                    process_string_func(strip_quotes(m.group(0)))
+                    for m in cls.ARRAY_ITEM_RE.finditer(array)
+                ])
+            ]
+
+        ref = m.group('ref_name')
+
+        if ref:
+            return [index, process_string_func('@@' + ref)]
+
+        # We shouldn't be able to reach here.
+        assert False
+
+
 class StringParser(object):
     """Parses a string for functions, variables, and references."""
 
@@ -363,6 +439,8 @@ class StringParser(object):
         'If': IfBlockFunction,
         'ElseIf': IfBlockFunction,
         'Else': ElseBlockFunction,
+        'GetAZs': GetAZsFunction,
+        'Select': SelectFunction,
     }
 
     def __init__(self, template_state):
@@ -483,11 +561,7 @@ class StringParser(object):
         params = groups['params']
 
         cls = self.FUNCTIONS.get(func_name, BlockFunction)
-
-        if params:
-            norm_params = cls.parse_params(params, self._parse_line)
-        else:
-            norm_params = []
+        norm_params = cls.parse_params(params, self._parse_line)
 
         func = cls(func_name, norm_params, stack=stack)
         func.validate(stack)
@@ -511,3 +585,12 @@ class StringParser(object):
     def _handle_var(self, stack, var_name):
         """Handles variable references found in a line."""
         stack.current.add_content(VarReference(var_name))
+
+
+def strip_quotes(s):
+    """Strip leading and trailing quotes from a string."""
+    if ((s.startswith('"') and s.endswith('"')) or
+        (s.startswith("'") and s.endswith("'"))):
+        return s[1:-1]
+    else:
+        return s

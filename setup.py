@@ -11,6 +11,7 @@ PACKAGE_NAME = 'cloudformer'
 commands = {
     'cloudformer-create-ami': 'create_ami',
     'cloudformer-compile-template': 'compile_template',
+    'cloudformer-launch-stack': 'launch_stack',
     'cloudformer-make-depends': 'make_depends',
 }
 

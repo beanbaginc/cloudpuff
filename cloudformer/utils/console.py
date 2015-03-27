@@ -1,7 +1,5 @@
 from __future__ import print_function, unicode_literals
 
-from getpass import getpass
-
 from six.moves import input
 
 
@@ -27,10 +25,11 @@ def prompt_template_param(template_param):
     prompt = prompt.encode('utf-8')
 
     while True:
-        if template_param.no_echo:
-            value = getpass(prompt)
-        else:
-            value = input(prompt)
+        # We should be checking template_param.no_echo, and using getpass()
+        # if it's set, but boto has a bug causing no_echo to always be True.
+        # This can be fixed once https://github.com/boto/boto/pull/3052 has
+        # landed.
+        value = input(prompt)
 
         if not value and default_value:
             value = default_value

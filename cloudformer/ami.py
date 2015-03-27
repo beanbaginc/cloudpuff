@@ -38,7 +38,7 @@ class AMICreator(object):
         self.pending_amis = []
         self.created_amis = []
 
-    def create_ami(self, ami_name, instance_id, ami_description):
+    def create_ami(self, instance_id, ami_name, ami_description):
         """Create an AMI for an instance with the given information.
 
         The AMI creation will be tracked. A PendingAMI will be stored and

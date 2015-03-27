@@ -6,7 +6,7 @@ import tempfile
 from unittest import TestCase
 
 from cloudformer.templates import TemplateCompiler, TemplateReader
-from cloudformer.templates.state import VarReference
+from cloudformer.templates.state import IfCondition, VarReference
 
 
 class TemplateCompilerTests(TestCase):
@@ -41,6 +41,93 @@ class TemplateCompilerTests(TestCase):
         self.assertEqual(doc['Outputs'], {'key': 'value'})
         self.assertFalse('junk' in doc)
 
+    def test_compiling_with_if_expressions(self):
+        """Testing TemplateCompiler with if expressions"""
+        compiler = TemplateCompiler()
+        compiler.load_string(
+            '--- !vars\n'
+            'foo: false\n'
+            '---\n'
+            'Meta:\n'
+            '    Description: My description.\n'
+            '    Version: 1.0\n'
+            '\n'
+            'Resources:\n'
+            '    key: |\n'
+            '        <% If ($$foo == true) { %>\n'
+            '        foo is true\n'
+            '        <% } %>\n')
+
+        doc = compiler.doc
+        self.assertEqual(doc['AWSTemplateFormatVersion'], '2010-09-09')
+        self.assertEqual(doc['Description'], 'My description. [v1.0]')
+        self.assertIn('Conditions', doc)
+        self.assertEqual(
+            doc['Conditions'],
+            {
+                'IfCondition1': {
+                    'Fn::Equals': ['false', 'true'],
+                }
+            })
+        self.assertEqual(
+            doc['Resources'],
+            {
+                'key': {
+                    'Fn::If': [
+                        'IfCondition1',
+                        'foo is true\n',
+                        {
+                            'Ref': 'AWS::NoValue',
+                        }
+                    ],
+                },
+            })
+
+    def test_compiling_with_if_expressions_in_macro(self):
+        """Testing TemplateCompiler with if expressions in macro"""
+        compiler = TemplateCompiler()
+        compiler.load_string(
+            '--- !macros\n'
+            'test-macro:\n'
+            '    content: |\n'
+            '        <% If ($$foo == true) { %>\n'
+            '        foo is true\n'
+            '        <% } %>\n'
+            '---\n'
+            'Meta:\n'
+            '    Description: My description.\n'
+            '    Version: 1.0\n'
+            '\n'
+            'Resources:\n'
+            '    key: !call-macro\n'
+            '        macro: test-macro\n'
+            '        foo: true\n')
+
+        doc = compiler.doc
+        self.assertEqual(doc['AWSTemplateFormatVersion'], '2010-09-09')
+        self.assertEqual(doc['Description'], 'My description. [v1.0]')
+        self.assertIn('Conditions', doc)
+        self.assertEqual(
+            doc['Conditions'],
+            {
+                'IfCondition1': {
+                    'Fn::Equals': ['true', 'true'],
+                }
+            })
+        self.assertEqual(
+            doc['Resources'],
+            {
+                'key': {
+                    'Fn::If': [
+                        'IfCondition1',
+                        'foo is true\n',
+                        {
+                            'Ref': 'AWS::NoValue',
+                        }
+                    ],
+                },
+            })
+
 
 class TemplateReaderTests(TestCase):
     """Unit tests for TemplateReader."""
@@ -69,12 +156,27 @@ class TemplateReaderTests(TestCase):
 
         self.assertEqual(reader.doc['key'], { 'Ref': 'MyRef' })
 
+    def test_embed_refs_with_vars(self):
+        """Testing TemplateReader with embedding @@$$RefVars"""
+        reader = TemplateReader()
+        reader.load_string('key: "@@$$refname"')
+
+        self.assertEqual(reader.doc['key'], { 'Ref': VarReference('refname') })
+
     def test_embed_refs_with_braces(self):
         """Testing TemplateReader with embedding @@{References}"""
         reader = TemplateReader()
         reader.load_string('key: "@@{MyRef}"')
 
         self.assertEqual(reader.doc['key'], { 'Ref': 'MyRef' })
+
+    def test_embed_refs_with_braces_and_vars(self):
+        """Testing TemplateReader with embedding @@{$$RefVars}"""
+        reader = TemplateReader()
+        reader.load_string('key: "@@{$$path.to.refname}"')
+
+        self.assertEqual(reader.doc['key'],
+                         { 'Ref': VarReference('path.to.refname') })
 
     def test_embed_vars(self):
         """Testing TemplateReader with embedding $$variables"""
@@ -125,26 +227,10 @@ class TemplateReaderTests(TestCase):
             {
                 'Fn::If': [
                     'a',
-                    'the line.\n'
-                ]
-            })
-
-    def test_embed_funcs_with_if_vars_in_params(self):
-        """Testing TemplateReader with embedding <% If %> and variables in params"""
-        reader = TemplateReader()
-        reader.template_state.variables['myvar'] = '123'
-        reader.load_string(
-            'key: |\n'
-            '    <% If ($$myvar) { %>\n'
-            '    the line.\n'
-            '    <% } %>')
-
-        self.assertEqual(
-            reader.doc['key'],
-            {
-                'Fn::If': [
-                    '123',
-                    'the line.\n'
+                    'the line.\n',
+                    {
+                        'Ref': 'AWS::NoValue',
+                    }
                 ]
             })
 
@@ -164,26 +250,9 @@ class TemplateReaderTests(TestCase):
                 'Fn::If': [
                     'a',
                     'this is 123.\n',
-                ]
-            })
-
-    def test_embed_funcs_with_if_refs_in_params(self):
-        """Testing TemplateReader with embedding <% If %> and references in params"""
-        reader = TemplateReader()
-        reader.load_string(
-            'key: |\n'
-            '    <% If (@@MyResource) { %>\n'
-            '    the line.\n'
-            '    <% } %>')
-
-        self.assertEqual(
-            reader.doc['key'],
-            {
-                'Fn::If': [
                     {
-                        'Ref': 'MyResource'
-                    },
-                    'the line.\n'
+                        'Ref': 'AWS::NoValue',
+                    }
                 ]
             })
 
@@ -213,6 +282,9 @@ class TemplateReaderTests(TestCase):
                                 '.\n'
                             ]
                         ]
+                    },
+                    {
+                        'Ref': 'AWS::NoValue',
                     }
                 ]
             })
@@ -240,6 +312,9 @@ class TemplateReaderTests(TestCase):
                                 'lines of content.\n',
                             ],
                         ],
+                    },
+                    {
+                        'Ref': 'AWS::NoValue',
                     }
                 ]
             })
@@ -286,6 +361,9 @@ class TemplateReaderTests(TestCase):
                         'Fn::If': [
                             'b',
                             'value2\n',
+                            {
+                                'Ref': 'AWS::NoValue',
+                            }
                         ]
                     }
                 ]
@@ -362,7 +440,7 @@ class TemplateReaderTests(TestCase):
         reader = TemplateReader()
         reader.load_string(
             'key: |\n'
-            '    <% If (@@a) { %>\n'
+            '    <% If (a) { %>\n'
             '    Line 1.\n'
             '    <%   If (b) { %>\n'
             '    Line 2.\n'
@@ -374,9 +452,7 @@ class TemplateReaderTests(TestCase):
             reader.doc['key'],
             {
                 'Fn::If': [
-                    {
-                        'Ref': 'a',
-                    },
+                    'a',
                     {
                         'Fn::Join': [
                             '',
@@ -385,12 +461,18 @@ class TemplateReaderTests(TestCase):
                                 {
                                     'Fn::If': [
                                         'b',
-                                        'Line 2.\n'
+                                        'Line 2.\n',
+                                        {
+                                            'Ref': 'AWS::NoValue',
+                                        }
                                     ]
                                 },
                                 'Line 3.\n'
                             ]
-                        ]
+                        ],
+                    },
+                    {
+                        'Ref': 'AWS::NoValue',
                     }
                 ]
             })
@@ -408,10 +490,13 @@ class TemplateReaderTests(TestCase):
             reader.doc['key'],
             {
                 'Fn::If': [
-                    {
+                    IfCondition({
                         'Fn::Equals': ['a', 'b'],
-                    },
-                    'the line.\n'
+                    }),
+                    'the line.\n',
+                    {
+                        'Ref': 'AWS::NoValue',
+                    }
                 ]
             })
 
@@ -428,20 +513,22 @@ class TemplateReaderTests(TestCase):
             reader.doc['key'],
             {
                 'Fn::If': [
-                    {
+                    IfCondition({
                         'Fn::Equals': [
                             { 'Ref': 'a' },
                             'b'
                         ],
-                    },
-                    'the line.\n'
+                    }),
+                    'the line.\n',
+                    {
+                        'Ref': 'AWS::NoValue',
+                    }
                 ]
             })
 
     def test_embed_funcs_with_if_equals_vars(self):
         """Testing TemplateReader with embedding <% If ($$lhs == rhs) %>"""
         reader = TemplateReader()
-        reader.template_state.variables['a'] = '123'
         reader.load_string(
             'key: |\n'
             '    <% If ($$a == b) { %>\n'
@@ -452,13 +539,16 @@ class TemplateReaderTests(TestCase):
             reader.doc['key'],
             {
                 'Fn::If': [
-                    {
+                    IfCondition({
                         'Fn::Equals': [
-                            '123',
+                            VarReference('a'),
                             'b'
                         ],
-                    },
-                    'the line.\n'
+                    }),
+                    'the line.\n',
+                    {
+                        'Ref': 'AWS::NoValue',
+                    }
                 ]
             })
 
@@ -475,12 +565,15 @@ class TemplateReaderTests(TestCase):
             reader.doc['key'],
             {
                 'Fn::If': [
-                    {
+                    IfCondition({
                         'Fn::Not': [{
                             'Fn::Equals': ['a', 'b'],
                         }]
-                    },
-                    'the line.\n'
+                    }),
+                    'the line.\n',
+                    {
+                        'Ref': 'AWS::NoValue',
+                    }
                 ]
             })
 
@@ -499,7 +592,7 @@ class TemplateReaderTests(TestCase):
             reader.doc['key'],
             {
                 'Fn::If': [
-                    {
+                    IfCondition({
                         'Fn::Or': [
                             {
                                 'Fn::And': [
@@ -524,11 +617,17 @@ class TemplateReaderTests(TestCase):
                                 ]
                             },
                             {
-                                'Fn::Equals': ['value', 'true'],
+                                'Fn::Equals': [
+                                    'value',
+                                    'true'
+                                ],
                             }
                         ]
-                    },
-                    'the line.\n'
+                    }),
+                    'the line.\n',
+                    {
+                        'Ref': 'AWS::NoValue',
+                    }
                 ]
             })
 
@@ -916,6 +1015,83 @@ class TemplateReaderTests(TestCase):
 
         self.assertEqual(reader.doc['key1'], 'default1')
         self.assertEqual(reader.doc['key2'], 'hello')
+
+    def test_statement_call_macro_with_if_expressions(self):
+        """Testing TemplateReader with !call-macro with If expressions"""
+        reader = TemplateReader()
+        reader.load_string(
+            '--- !macros\n'
+            'test-macro:\n'
+            '    defaultParams:\n'
+            '        param1: false\n'
+            '\n'
+            '    content:\n'
+            '        string: |\n'
+            '            <% If ($$param1 == true) { %>\n'
+            '            param1 is true\n'
+            '            <% } %>\n'
+            '\n'
+            '---\n'
+            'key: !call-macro\n'
+            '    macro: test-macro\n'
+            '    param1: true\n')
+
+        self.assertEqual(
+            reader.doc['key'],
+            {
+                'string': {
+                    'Fn::If': [
+                        IfCondition({
+                            'Fn::Equals': [
+                                'true',
+                                'true'
+                            ],
+                        }),
+                        'param1 is true\n',
+                        {
+                            'Ref': 'AWS::NoValue',
+                        }
+                    ]
+                }
+            })
+
+    def test_statement_call_macro_with_if_expressions_defaults(self):
+        """Testing TemplateReader with !call-macro with If expressions and default value"""
+        reader = TemplateReader()
+        reader.load_string(
+            '--- !macros\n'
+            'test-macro:\n'
+            '    defaultParams:\n'
+            '        param1: false\n'
+            '\n'
+            '    content:\n'
+            '        string: |\n'
+            '            <% If ($$param1 == true) { %>\n'
+            '            param1 is true\n'
+            '            <% } %>\n'
+            '\n'
+            '---\n'
+            'key: !call-macro\n'
+            '    macro: test-macro\n')
+
+        self.assertEqual(
+            reader.doc['key'],
+            {
+                'string': {
+                    'Fn::If': [
+                        IfCondition({
+                            'Fn::Equals': [
+                                'false',
+                                'true'
+                            ],
+                        }),
+                        'param1 is true\n',
+                        {
+                            'Ref': 'AWS::NoValue',
+                        }
+                    ]
+                }
+            })
 
     def test_statement_import(self):
         """Testing TemplateReader with !import"""

@@ -5,8 +5,8 @@ import re
 from yaml.constructor import ConstructorError
 
 from cloudformer.templates.expression_parser import ExpressionParser
-from cloudformer.templates.state import (UncollapsibleList, VarReference,
-                                         VarsStringsList)
+from cloudformer.templates.state import (IfCondition, UncollapsibleList,
+                                         VarReference, VarsStringsList)
 
 
 # CloudFormation functions, optionally with opening blocks
@@ -20,7 +20,10 @@ CLOSE_FUNC_RE = re.compile(r'(?P<func_close><%\s*}\s*%>)\n?')
 
 # Resource/Parameter references
 REFERENCE_RE = re.compile(
-    r'@@(?P<ref_brace>{)?(?P<ref_name>[A-Za-z0-9:_]+)(?(ref_brace)})')
+    r'@@(?P<ref_brace>{)?'
+    r'(?P<ref_name>(?P<var_in_ref>\$\$)?'
+    r'([A-Za-z0-9:_]|(?(ref_brace)(?(var_in_ref)\.)))+)'
+    r'(?(ref_brace)})')
 
 # Template variables
 VARIABLE_RE = re.compile(
@@ -335,13 +338,35 @@ class IfBlockFunction(BlockFunction):
         else:
             contents.append(if_true_content)
 
-        if if_false_content:
-            if isinstance(if_false_content, list):
-                contents += if_false_content
-            else:
-                contents.append(if_false_content)
+        if not if_false_content:
+            if_false_content = {
+                'Ref': 'AWS::NoValue',
+            }
+
+        if isinstance(if_false_content, list):
+            contents += if_false_content
+        else:
+            contents.append(if_false_content)
 
         return contents
+
+    def serialize(self):
+        norm_func_name = self.normalize_function_name()
+        norm_contents = self.normalize_function_contents(self.contents)
+
+        assert len(self.params) == 1
+
+        if isinstance(self.params[0], dict):
+            param = IfCondition(self.params[0])
+        elif isinstance(self.params[0], basestring):
+            param = self.params[0]
+        else:
+            raise ConstructorError('Invalid parameter to If: %r'
+                                   % self.params[0])
+
+        return {
+            norm_func_name: UncollapsibleList([param] + norm_contents),
+        }
 
 
 class ElseBlockFunction(BlockFunction):
@@ -578,8 +603,13 @@ class StringParser(object):
 
     def _handle_ref_name(self, groups, stack):
         """Handles resource references found in a line."""
+        ref = groups['ref_name']
+
+        if ref.startswith('$$'):
+            ref = VarReference(ref[2:])
+
         stack.current.add_content({
-            'Ref': groups['ref_name']
+            'Ref': ref,
         })
 
     def _handle_var(self, stack, var_name):

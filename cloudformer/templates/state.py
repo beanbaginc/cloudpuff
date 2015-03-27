@@ -18,12 +18,15 @@ class TemplateState(object):
         self.macros = {}
         self.unresolved_variables = set()
         self.imported_files = set()
+        self.embedded_files = set()
+        self.if_conditions = OrderedDict()
 
     def update(self, other_state):
         self.macros.update(other_state.macros)
         self.variables.update(other_state.variables)
         self.unresolved_variables.update(other_state.unresolved_variables)
         self.imported_files.update(other_state.imported_files)
+        self.embedded_files.update(other_state.embedded_files)
 
     def resolve(self, name, d):
         """Resolve a variable or macro name or path.
@@ -38,7 +41,8 @@ class TemplateState(object):
 
         return result
 
-    def process_tree(self, node_value, variables=None, resolve_variables=True):
+    def process_tree(self, node_value, variables=None,
+                     resolve_variables=True, resolve_if_conditions=False):
         """Resolve variables found in a part of the tree.
 
         This will walk the tree and resolve any variables found. If
@@ -51,12 +55,14 @@ class TemplateState(object):
         if isinstance(node_value, dict):
             return OrderedDict(
                 (self.process_tree(key, variables, resolve_variables),
-                 self.process_tree(value, variables, resolve_variables))
+                 self.process_tree(value, variables, resolve_variables,
+                                   resolve_if_conditions))
                 for key, value in six.iteritems(node_value)
             )
         elif isinstance(node_value, list):
             value = [
-                self.process_tree(item, variables, resolve_variables)
+                self.process_tree(item, variables, resolve_variables,
+                                  resolve_if_conditions)
                 for item in self.collapse_variables(node_value, variables)
             ]
 
@@ -79,6 +85,17 @@ class TemplateState(object):
                 return value
             except KeyError:
                 raise KeyError('Unknown variable "%s"' % node_value.name)
+        elif isinstance(node_value, IfCondition):
+            if resolve_if_conditions:
+                name = 'IfCondition%d' % (len(self.if_conditions) + 1)
+                self.if_conditions[name] = self.process_tree(
+                    node_value.condition, variables, resolve_variables)
+
+                return name
+            else:
+                return IfCondition(self.process_tree(node_value.condition,
+                                                     variables,
+                                                     resolve_variables))
         else:
             return node_value
 
@@ -89,7 +106,15 @@ class TemplateState(object):
         VarsStringsList. That allows the string to be later identified, so
         that it can potentially be turned back into a single string.
         """
-        if any([isinstance(item, VarReference) for item in l]):
+        has_vars = False
+
+        for item in l:
+            if isinstance(item, VarReference):
+                has_vars = True
+            elif not isinstance(item, basestring):
+                return l
+
+        if has_vars:
             return VarsStringsList(l)
         else:
             return l
@@ -137,6 +162,26 @@ class TemplateState(object):
         return result
 
 
+class IfCondition(object):
+    """State on a parsed If condition.
+
+    This stores information on a parsed expression for an If condition,
+    and the parsed If function's dictionary that references it.
+    """
+
+    def __init__(self, condition):
+        self.condition = condition
+
+    def __eq__(self, other):
+        if not isinstance(other, IfCondition):
+            return False
+
+        return self.condition == other.condition
+
+    def __repr__(self):
+        return '<IfCondition(%r)>' % self.condition
+
+
 class VarReference(object):
     """A reference to a variable.
 
@@ -148,6 +193,9 @@ class VarReference(object):
         self.name = name
 
     def __eq__(self, other):
+        if not isinstance(other, VarReference):
+            return False
+
         return self.name == other.name
 
     def __repr__(self):

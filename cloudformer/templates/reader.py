@@ -75,6 +75,7 @@ class TemplateLoader(yaml.Loader):
         cls.add_constructor('tag:yaml.org,2002:bool', cls.construct_yaml_str)
 
         # Define some custom functions that will be used.
+        cls.add_constructor('!embed-file', cls.construct_embed_file)
         cls.add_constructor('!import', cls.construct_import)
         cls.add_constructor('!call-macro', cls.construct_call_macro)
         cls.add_constructor('!cloud-init', cls.construct_cloud_init)
@@ -120,6 +121,40 @@ class TemplateLoader(yaml.Loader):
         parser = StringParser(self.template_state)
 
         return parser.parse_string(node.value)
+
+    def construct_embed_file(self, node):
+        """Handle !embed-file statements.
+
+        This takes a filename and serializes it to a string. The file is
+        treated as a plain text blob, and will not be processed for
+        variables or references.
+        """
+        values = self.construct_mapping(node)
+
+        try:
+            filename = values['filename']
+        except KeyError:
+            raise ConstructorError('Missing filename in !embed-file')
+
+        is_base64 = values.get('base64', False)
+
+        self.template_state.embedded_files.add(filename)
+
+        try:
+            with open(filename, 'r') as fp:
+                result = {
+                    'Fn::Join': ['', fp.readlines()],
+                }
+
+                if is_base64:
+                    result = {
+                        'Fn::Base64': result
+                    }
+
+                return result
+        except IOError as e:
+            raise ConstructorError('Unable to read file "%s" for embedding'
+                                   % filename)
 
     def construct_import(self, node):
         """Handle !import statements.

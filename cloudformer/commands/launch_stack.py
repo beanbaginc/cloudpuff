@@ -20,6 +20,12 @@ class LaunchStack(BaseCommand):
             default='us-east-1',
             help='The region to connect to.')
         parser.add_argument(
+            '--no-rollback',
+            action='store_false',
+            dest='rollback',
+            default=True,
+            help='Prevents rollback when there are errors launching a stack.')
+        parser.add_argument(
             '--stack-name',
             help='The optional name for the stack.')
         parser.add_argument(
@@ -60,7 +66,8 @@ class LaunchStack(BaseCommand):
                 stack_name=self.options.stack_name or
                            self._generate_stack_name(),
                 template_body=template_body,
-                params=params)
+                params=params,
+                rollback_on_error=self.options.rollback)
         except StackCreationError as e:
             sys.stderr.write('Error creating the stack: %s\n' % e)
             sys.exit(1)

@@ -47,6 +47,12 @@ class CreateAMI(BaseCommand):
             default='us-east-1',
             help='The region to connect to.')
         parser.add_argument(
+            '--no-rollback',
+            action='store_false',
+            dest='rollback',
+            default=True,
+            help='Prevents rollback when there are errors launching a stack.')
+        parser.add_argument(
             '--param',
             dest='params',
             metavar='KEY=VALUE',
@@ -98,6 +104,7 @@ class CreateAMI(BaseCommand):
                 stack_name=self._generate_stack_name(),
                 template_body=template_body,
                 params=params,
+                rollback_on_error=self.options.rollback,
                 tags={
                     'cloudformer_ami_creation': '1',
                 })

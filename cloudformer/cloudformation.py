@@ -24,6 +24,7 @@ class CloudFormation(object):
         return self.cnx.validate_template(template_body)
 
     def create_stack_and_wait(self, stack_name, template_body, params,
+                              rollback_on_error=True,
                               tags={}, timeout_mins=DEFAULT_TIMEOUT_MINS):
         """Create a stack and wait for it to complete.
 
@@ -38,6 +39,7 @@ class CloudFormation(object):
             template_body=template_body,
             parameters=params,
             timeout_in_minutes=timeout_mins,
+            disable_rollback=not rollback_on_error,
             tags=tags,
             capabilities=['CAPABILITY_IAM'])
 

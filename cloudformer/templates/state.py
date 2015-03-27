@@ -60,9 +60,13 @@ class TemplateState(object):
                 for item in self.collapse_variables(node_value, variables)
             ]
 
-            if (isinstance(node_value, VarsStringsList) and
-                all([isinstance(item, basestring) for item in value])):
-                value = ''.join(value)
+            if isinstance(node_value, VarsStringsList):
+                if all(isinstance(item, basestring) for item in value):
+                    value = ''.join(value)
+                else:
+                    value = {
+                        'Fn::Join': ['', value],
+                    }
             elif isinstance(node_value, UncollapsibleList):
                 value = UncollapsibleList(value)
 

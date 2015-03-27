@@ -680,6 +680,34 @@ class TemplateReaderTests(TestCase):
                 ' - baz',
             ])
 
+    def test_process_strings_with_vars_to_refs(self):
+        """Testing TemplateReader with processing strings in macros"""
+        reader = TemplateReader()
+        reader.load_string(
+            '--- !macros\n'
+            'macro1:\n'
+            '    content: "[$$myvar] test"\n'
+            '\n'
+            '---\n'
+            'key: !call-macro\n'
+            '    macro: macro1\n'
+            '    myvar: "@@MyRef"\n')
+
+        self.assertEqual(
+            reader.doc['key'],
+            {
+                'Fn::Join': [
+                    '',
+                    [
+                        '[',
+                        {
+                            'Ref': 'MyRef',
+                        },
+                        '] test'
+                    ]
+                ]
+            })
+
     def test_process_strings_funcs(self):
         """Testing TemplateReader with processing strings with <% Functions %>"""
         reader = TemplateReader()

@@ -1,5 +1,7 @@
 from __future__ import unicode_literals
 
+import random
+import sys
 from collections import OrderedDict
 
 import yaml
@@ -75,6 +77,7 @@ class TemplateLoader(yaml.Loader):
         # Define some custom functions that will be used.
         cls.add_constructor('!import', cls.construct_import)
         cls.add_constructor('!call-macro', cls.construct_call_macro)
+        cls.add_constructor('!cloud-init', cls.construct_cloud_init)
         cls.add_constructor('!tags', cls.construct_tags)
 
     def construct_ordered_mapping(self, node):
@@ -154,6 +157,83 @@ class TemplateLoader(yaml.Loader):
         variables.update(values)
 
         return self._process_macro(content, name, variables)
+
+    def construct_cloud_init(self, node):
+        """Handle !cloud-init statements.
+
+        This constructs a base64-encoded mime message that can upload new
+        cloud-init configuration and a setup script.
+
+        When specifying multiple items for UserData like this for cloud-init,
+        a mime message must be formatted and embedded in a CloudFormation
+        template. This takes the hard work out of that.
+
+        The cloud-init configuration is defined as a string in the
+        'config' key.
+
+        The setup script is defined as a string in the 'setup' key.
+        """
+        children = self.construct_mapping(node)
+        mime_items = []
+
+        if 'config' in children:
+            content = children['config']
+
+            mime_items.append({
+                'contentType': 'text/cloud-config',
+                'filename': 'cloud.cfg',
+                'content': content,
+            })
+
+        if 'script' in children:
+            mime_items.append({
+                'contentType': 'text/x-shellscript',
+                'filename': 'script.sh',
+                'content': children['script'],
+            })
+
+        if len(mime_items) > 1:
+            fmt = '%%0%dd' % len(repr(sys.maxsize - 1))
+            token = random.randrange(sys.maxsize)
+            boundary = '%s%s==' % ('=' * 15, fmt % token)
+
+            result = [
+                'Content-Type: multipart/mixed; boundary="%s"\n' % boundary,
+                'MIME-Version: 1.0\n',
+                '\n'
+            ]
+
+            for item in mime_items:
+                content_type = item['contentType']
+                filename = item['filename']
+                content = item['content']
+
+                if isinstance(content, dict) and 'Fn::Join' in content:
+                    content = content['Fn::Join'][1]
+
+                result += [
+                    '--%s\n' % boundary,
+                    'Content-Type: %s\n' % content_type,
+                    'MIME-Version: 1.0\n',
+                    'Content-Disposition: attachment; filename="%s"\n' % filename,
+                    '\n',
+                ]
+
+                result += content
+
+            result.append('--%s--\n' % boundary)
+
+            result = {
+                'Fn::Join': ['', result],
+            }
+        else:
+            assert mime_items
+
+            result = mime_items[0]['content']
+
+        return {
+            'Fn::Base64': result,
+        }
 
     def construct_tags(self, node):
         """Handle !tags statements.

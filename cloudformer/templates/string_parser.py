@@ -20,7 +20,10 @@ CLOSE_FUNC_RE = re.compile(r'(?P<func_close><%\s*}\s*%>)\n?')
 
 # Resource/Parameter references
 REFERENCE_RE = re.compile(
-    r'@@(?P<ref_brace>{)?(?P<ref_name>[A-Za-z0-9:_]+)(?(ref_brace)})')
+    r'@@(?P<ref_brace>{)?'
+    r'(?P<ref_name>(?P<var_in_ref>\$\$)?'
+    r'([A-Za-z0-9:_]|(?(ref_brace)(?(var_in_ref)\.)))+)'
+    r'(?(ref_brace)})')
 
 # Template variables
 VARIABLE_RE = re.compile(
@@ -578,8 +581,13 @@ class StringParser(object):
 
     def _handle_ref_name(self, groups, stack):
         """Handles resource references found in a line."""
+        ref = groups['ref_name']
+
+        if ref.startswith('$$'):
+            ref = VarReference(ref[2:])
+
         stack.current.add_content({
-            'Ref': groups['ref_name']
+            'Ref': ref,
         })
 
     def _handle_var(self, stack, var_name):

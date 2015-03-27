@@ -69,12 +69,27 @@ class TemplateReaderTests(TestCase):
 
         self.assertEqual(reader.doc['key'], { 'Ref': 'MyRef' })
 
+    def test_embed_refs_with_vars(self):
+        """Testing TemplateReader with embedding @@$$RefVars"""
+        reader = TemplateReader()
+        reader.load_string('key: "@@$$refname"')
+
+        self.assertEqual(reader.doc['key'], { 'Ref': VarReference('refname') })
+
     def test_embed_refs_with_braces(self):
         """Testing TemplateReader with embedding @@{References}"""
         reader = TemplateReader()
         reader.load_string('key: "@@{MyRef}"')
 
         self.assertEqual(reader.doc['key'], { 'Ref': 'MyRef' })
+
+    def test_embed_refs_with_braces_and_vars(self):
+        """Testing TemplateReader with embedding @@{$$RefVars}"""
+        reader = TemplateReader()
+        reader.load_string('key: "@@{$$path.to.refname}"')
+
+        self.assertEqual(reader.doc['key'],
+                         { 'Ref': VarReference('path.to.refname') })
 
     def test_embed_vars(self):
         """Testing TemplateReader with embedding $$variables"""

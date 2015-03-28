@@ -5,8 +5,8 @@ import re
 from yaml.constructor import ConstructorError
 
 from cloudformer.templates.expression_parser import ExpressionParser
-from cloudformer.templates.state import (UncollapsibleList, VarReference,
-                                         VarsStringsList)
+from cloudformer.templates.state import (IfCondition, UncollapsibleList,
+                                         VarReference, VarsStringsList)
 
 
 # CloudFormation functions, optionally with opening blocks
@@ -324,27 +324,37 @@ class IfBlockFunction(BlockFunction):
         return 'Fn::If'
 
     def normalize_function_contents(self, contents):
-        """Normalizes the if-true and if-false content.
-
-        The if-true content will always be added, but if-false will only
-        be added if there's actual content there.
-        """
-        contents = []
+        """Normalizes the if-true and if-false content."""
         if_true_content = self.normalize_content(self._if_true_content)
         if_false_content = self.normalize_content(self._if_false_content)
 
-        if isinstance(if_true_content, list):
-            contents += if_true_content
+        if not if_false_content:
+            if_false_content = {
+                'Ref': 'AWS::NoValue',
+            }
+
+        return [
+            if_true_content,
+            if_false_content,
+        ]
+
+    def serialize(self):
+        norm_func_name = self.normalize_function_name()
+        norm_contents = self.normalize_function_contents(self.contents)
+
+        assert len(self.params) == 1
+
+        if isinstance(self.params[0], dict):
+            param = IfCondition(self.params[0])
+        elif isinstance(self.params[0], basestring):
+            param = self.params[0]
         else:
-            contents.append(if_true_content)
+            raise ConstructorError('Invalid parameter to If: %r'
+                                   % self.params[0])
 
-        if if_false_content:
-            if isinstance(if_false_content, list):
-                contents += if_false_content
-            else:
-                contents.append(if_false_content)
-
-        return contents
+        return {
+            norm_func_name: UncollapsibleList([param] + norm_contents),
+        }
 
 
 class ElseBlockFunction(BlockFunction):

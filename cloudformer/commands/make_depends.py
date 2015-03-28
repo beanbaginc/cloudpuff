@@ -22,7 +22,6 @@ class MakeDepends(BaseCommand):
 
         deps = [filename]
         deps += reader.template_state.imported_files
-        deps += reader.template_state.embedded_files
 
         print('%s: %s' % (self.options.dest_filename, ' '.join(deps)))
 

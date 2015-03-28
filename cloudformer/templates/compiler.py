@@ -15,8 +15,6 @@ class TemplateCompiler(object):
     attribute.
     """
 
-    SECTIONS = ('Parameters', 'Mappings', 'Conditions', 'Resources', 'Outputs')
-
     def __init__(self, for_amis=False):
         self.doc = None
         self.for_amis = for_amis
@@ -40,32 +38,16 @@ class TemplateCompiler(object):
 
             self.doc['Description'] = description
 
-        for section in self.SECTIONS:
+        for key in ('Parameters', 'Mappings', 'Conditions', 'Resources',
+                    'Outputs'):
             try:
-                self.doc[section] = reader.doc[section]
+                self.doc[key] = reader.doc[key]
             except KeyError:
-                self.doc[section] = OrderedDict()
-
-        # Process any if statements found, converting them to Conditions.
-        template_state = reader.template_state
-
-        for section in ('Conditions', 'Resources'):
-            self.doc[section] = template_state.process_tree(
-                self.doc[section],
-                resolve_variables=False,
-                resolve_if_conditions=True)
-
-        if template_state.if_conditions:
-            self.doc['Conditions'].update(template_state.if_conditions)
+                pass
 
         # Look for any metadata specific to CloudFormer that we want to
         # process.
         self._scan_cloudformer_metadata()
-
-        # Clean up any sections not being used.
-        for section in self.SECTIONS:
-            if not self.doc[section]:
-                del self.doc[section]
 
     def load_file(self, filename):
         """Load a CloudFormer template from disk."""

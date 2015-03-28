@@ -18,12 +18,14 @@ class TemplateState(object):
         self.macros = {}
         self.unresolved_variables = set()
         self.imported_files = set()
+        self.embedded_files = set()
 
     def update(self, other_state):
         self.macros.update(other_state.macros)
         self.variables.update(other_state.variables)
         self.unresolved_variables.update(other_state.unresolved_variables)
         self.imported_files.update(other_state.imported_files)
+        self.embedded_files.update(other_state.embedded_files)
 
     def resolve(self, name, d):
         """Resolve a variable or macro name or path.

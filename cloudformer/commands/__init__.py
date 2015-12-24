@@ -1,7 +1,10 @@
 from __future__ import unicode_literals
 
 import argparse
+import sys
 import textwrap
+
+from colorama import init as init_colorama
 
 from cloudformer.utils.log import init_logging
 
@@ -25,6 +28,8 @@ class BaseCommand(object):
 
         self.options = parser.parse_args()
         init_logging(debug=self.options.debug)
+
+        init_colorama(strip=not sys.stdout.isatty())
 
         self.main()
 

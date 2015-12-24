@@ -12,6 +12,7 @@ commands = {
     'cloudformer-create-ami': 'create_ami',
     'cloudformer-compile-template': 'compile_template',
     'cloudformer-launch-stack': 'launch_stack',
+    'cloudformer-list-stacks': 'list_stacks',
     'cloudformer-make-depends': 'make_depends',
 }
 
@@ -28,6 +29,7 @@ setup(
     },
     install_requires=[
         'boto',
+        'colorama',
         'PyYAML>=3.11',
         'six',
     ],

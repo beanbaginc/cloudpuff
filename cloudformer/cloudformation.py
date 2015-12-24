@@ -19,6 +19,15 @@ class CloudFormation(object):
     def __init__(self, region):
         self.cnx = boto.cloudformation.connect_to_region(region)
 
+    def lookup_stacks(self):
+        """Return all stacks known to CloudFormation.
+
+        Returns:
+            list of boto.cloudformation.stack.Stack:
+            The list of stacks.
+        """
+        return self.cnx.describe_stacks()
+
     def validate_template(self, template_body):
         """Validate the given template string."""
         return self.cnx.validate_template(template_body)

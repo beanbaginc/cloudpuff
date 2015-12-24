@@ -128,6 +128,28 @@ class TemplateCompilerTests(TestCase):
                 },
             })
 
+    def test_get_tags(self):
+        """Testing TemplateCompiler.get_tags"""
+        compiler = TemplateCompiler()
+        compiler.load_string(
+            'Meta:\n'
+            '    Name: my-stack\n'
+            '    Version: 1.0\n'
+            '    Tags:\n'
+            '        MyKey: My value\n'
+            '        MyRef: "@@MyParam"\n')
+
+        params = (('MyParam', 'MyParamValue'),)
+
+        self.assertEqual(
+            compiler.get_tags(params),
+            {
+                'GenericStackName': 'my-stack',
+                'StackVersion': '1.0',
+                'MyKey': 'My value',
+                'MyRef': 'MyParamValue',
+            })
+
 
 class TemplateReaderTests(TestCase):
     """Unit tests for TemplateReader."""

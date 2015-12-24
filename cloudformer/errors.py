@@ -1,6 +1,10 @@
 from __future__ import unicode_literals
 
 
+class InvalidTagError(Exception):
+    """A tag name or value was invalid."""
+
+
 class StackCreationError(Exception):
     """Error creating a new stack."""
 

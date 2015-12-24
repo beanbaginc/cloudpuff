@@ -5,6 +5,7 @@ import os
 import sys
 from datetime import datetime
 
+import six
 from colorama import Fore, Style
 
 from cloudformer.cloudformation import CloudFormation
@@ -67,6 +68,7 @@ class ListStacks(BaseCommand):
                     'description': stack.description,
                     'arn': stack.stack_id,
                     'created': stack.creation_time.isoformat(),
+                    'tags': stack.tags,
                     'outputs': dict(
                         (output.key, output.value)
                         for output in stacks
@@ -111,6 +113,12 @@ class ListStacks(BaseCommand):
 
                 for output in stack.outputs:
                     self._print_field(output.key, output.value, indent_level=2)
+
+            if stack.tags:
+                self._print_field('Tags', indent_level=1)
+
+                for tag_name, tag_value in six.iteritems(stack.tags):
+                    self._print_field(tag_name, tag_value, indent_level=2)
 
     def _print_field(self, key, value='', indent_level=0, key_color=None,
                      value_color=None):

@@ -100,6 +100,8 @@ class LaunchStack(BaseCommand):
         compiler.load_file(template_file)
         template_body = compiler.to_json()
 
+        generic_stack_name = compiler.meta['Name']
+
         self.cf = CloudFormation(self.options.region)
         result = self.cf.validate_template(template_body)
 
@@ -155,6 +157,7 @@ class LaunchStack(BaseCommand):
                     stack_name=stack_name,
                     template_body=template_body,
                     params=params,
+                    tags=compiler.get_tags(params),
                     rollback_on_error=self.options.rollback))
             except StackUpdateError as e:
                 print()
@@ -168,7 +171,8 @@ class LaunchStack(BaseCommand):
                          stack_name, template_file))
                 sys.exit(1)
         else:
-            stack_name = self.options.stack_name or self._generate_stack_name()
+            stack_name = (self.options.stack_name or
+                          self._generate_stack_name(generic_stack_name))
             params = self._get_template_params(result.template_parameters)
 
             print('Creating the CloudFormation stack.')
@@ -179,6 +183,7 @@ class LaunchStack(BaseCommand):
                     stack_name=stack_name,
                     template_body=template_body,
                     params=params,
+                    tags=compiler.get_tags(params),
                     rollback_on_error=self.options.rollback))
             except StackCreationError as e:
                 print()
@@ -194,19 +199,20 @@ class LaunchStack(BaseCommand):
         print('%sStack ID:%s %s' %
               (Style.BRIGHT, Style.RESET_ALL, stack_name))
 
-    def _generate_stack_name(self):
-        """Generate a name for a new CloudFormation stack.
+    def _generate_stack_name(self, base_stack_name):
+        """Generate a timestamped name for a new CloudFormation stack.
 
-        The name will be prefixed with "ami-creator-", a normalized version
-        of the template filename, and the date/time.
+        The name will be consist of the given stack name and a date/time.
+
+        Args:
+            base_stack_name (unicode):
+                The base name for the stack.
+
+        Returns:
+            unicode:
+            A stack name in the form of :samp:`{base_stack_name}-{timestamp}`.
         """
-        template_file = self.options.template
-        norm_filename = \
-            '.'.join(os.path.basename(template_file).split('.')[:-1])
-        norm_filename = norm_filename.replace('_', '-')
-        norm_filename = norm_filename.replace('.', '-')
-
-        return '%s-%s' % (norm_filename,
+        return '%s-%s' % (base_stack_name,
                           datetime.now().strftime('%Y%m%d%H%M%S'))
 
     def _get_template_params(self, template_parameters):

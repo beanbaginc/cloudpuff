@@ -10,7 +10,7 @@ from colorama import Fore, Style
 
 from cloudformer.cloudformation import CloudFormation
 from cloudformer.commands import BaseCommand, run_command
-from cloudformer.errors import StackCreationError
+from cloudformer.errors import StackCreationError, StackUpdateError
 from cloudformer.templates import TemplateCompiler
 from cloudformer.utils.console import prompt_template_param
 
@@ -58,6 +58,17 @@ class LaunchStack(BaseCommand):
             default=True,
             help='Prevents rollback when there are errors launching a stack.')
         parser.add_argument(
+            '-u', '--update',
+            action='store_true',
+            default=False,
+            help='Update an existing stack.')
+        parser.add_argument(
+            '-k', '--keep-params',
+            action='store_true',
+            default=False,
+            help='Keep all parameters from the old template, if updating. '
+                 'Only unknown parameters will be prompted for.')
+        parser.add_argument(
             '--stack-name',
             help='The optional name for the stack.')
         parser.add_argument(
@@ -81,6 +92,10 @@ class LaunchStack(BaseCommand):
                              % template_file)
             sys.exit(1)
 
+        if self.options.update and not self.options.stack_name:
+            sys.stderr.write('The --update option requires --stack-name.\n')
+            sys.exit(1)
+
         compiler = TemplateCompiler(for_amis=True)
         compiler.load_file(template_file)
         template_body = compiler.to_json()
@@ -90,25 +105,88 @@ class LaunchStack(BaseCommand):
 
         print()
 
-        stack_name = self.options.stack_name or self._generate_stack_name()
-        params = self._get_template_params(result.template_parameters)
+        if self.options.update:
+            stack_name = self.options.stack_name
+            stack = self.cf.lookup_stack(stack_name)
 
-        print('Creating the CloudFormation stack.')
-        print('Please wait. This may take several minutes...')
+            stack_params = dict([
+                (param.key, param.value)
+                for param in stack.parameters
+            ])
 
-        try:
-            self._print_events(self.cf.create_stack_and_wait(
-                stack_name=stack_name,
-                template_body=template_body,
-                params=params,
-                rollback_on_error=self.options.rollback))
-        except StackCreationError as e:
-            print()
-            print('%s Creating the stack has failed.'
-                  % self.STYLED_ICON_ERROR)
-            print()
-            print('Delete the stack and try again.')
-            sys.exit(1)
+            template_params = result.template_parameters
+            new_template_params = []
+            template_param_keys = set()
+
+            # Set the defaults for all template parameters based on what's
+            # already used in the stack.
+            for template_param in template_params:
+                key = template_param.parameter_key
+                template_param_keys.add(key)
+
+                if key in stack_params:
+                    template_param.default_value = stack_params[key]
+
+            if self.options.keep_params:
+                # We're going to keep any parameters already set in the stack,
+                # so exclude any for now so that we don't prompt for them.
+                template_params = [
+                    template_param
+                    for template_param in template_params
+                    if template_param.parameter_key not in stack_params
+                ]
+
+            params = self._get_template_params(template_params)
+
+            if self.options.keep_params:
+                # Add any existing stack parameters to the list here. Only
+                # include those that exist in the current template.
+                params += [
+                    (param_key, param_value)
+                    for param_key, param_value in six.iteritems(stack_params)
+                    if param_key in template_param_keys
+                ]
+
+            print('Updating the CloudFormation stack.')
+            print('Please wait. This may take several minutes...')
+
+            try:
+                self._print_events(self.cf.update_stack_and_wait(
+                    stack_name=stack_name,
+                    template_body=template_body,
+                    params=params,
+                    rollback_on_error=self.options.rollback))
+            except StackUpdateError as e:
+                print()
+                print('%s Updating the stack has failed.'
+                      % self.STYLED_ICON_ERROR)
+                print()
+                print('You can update the template and try again with:')
+                print()
+                print('%s$%s %s -u -k --stack-name=%s --template %s'
+                      % (Fore.CYAN, Style.RESET_ALL, sys.argv[0],
+                         stack_name, template_file))
+                sys.exit(1)
+        else:
+            stack_name = self.options.stack_name or self._generate_stack_name()
+            params = self._get_template_params(result.template_parameters)
+
+            print('Creating the CloudFormation stack.')
+            print('Please wait. This may take several minutes...')
+
+            try:
+                self._print_events(self.cf.create_stack_and_wait(
+                    stack_name=stack_name,
+                    template_body=template_body,
+                    params=params,
+                    rollback_on_error=self.options.rollback))
+            except StackCreationError as e:
+                print()
+                print('%s Creating the stack has failed.'
+                      % self.STYLED_ICON_ERROR)
+                print()
+                print('Delete the stack and try again.')
+                sys.exit(1)
 
         print()
         print('%s The stack has been launched!' % self.STYLED_ICON_SUCCESS)

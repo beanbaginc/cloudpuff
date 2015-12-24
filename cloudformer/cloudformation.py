@@ -4,7 +4,8 @@ import time
 
 import boto.cloudformation
 
-from cloudformer.errors import StackCreationError, StackLookupError
+from cloudformer.errors import (StackCreationError, StackLookupError,
+                                StackUpdateError)
 
 
 class CloudFormation(object):
@@ -128,6 +129,71 @@ class CloudFormation(object):
         if stack_status != 'CREATE_COMPLETE':
             raise StackCreationError(
                 'Stack creation failed. Got status: "%s"'
+                % stack_status)
+
+    def update_stack_and_wait(self, stack_name, template_body, params,
+                              rollback_on_error=True,
+                              tags={}, timeout_mins=DEFAULT_TIMEOUT_MINS):
+        """Update a stack and wait for it to complete.
+
+        As changes are made to the stack, events will be yielded to the caller,
+        until the update either finishes or fails.
+
+        Args:
+            stack_name (unicode):
+                The name of the stack to update.
+
+            template_body (unicode):
+                The template to use for the stack.
+
+            params (list of tuple):
+                The parameters to pass to the stack, in the form of a list
+                of tuple of key/value pairs.
+
+            rollback_on_error (bool, optional):
+                Whether to roll back the stack changes if there's an error.
+
+            tags (dict, optional):
+                Tags to apply to the stack.
+
+            timeout_mins (int, optional):
+                The amount of time to wait without any activity before
+                giving up.
+
+        Yields:
+            boto.cloudformation.stack.StackEvent:
+            Events for changes being performed.
+
+        Raises:
+            cloudformer.errors.StackUpdateError:
+                An error updating the stack.
+        """
+        last_event_id = self.lookup_stack_events(stack_name)[0].event_id
+
+        stack_id = self.cnx.update_stack(
+            stack_name,
+            template_body=template_body,
+            parameters=params,
+            timeout_in_minutes=timeout_mins,
+            disable_rollback=not rollback_on_error,
+            tags=tags,
+            capabilities=['CAPABILITY_IAM'])
+
+        stack = None
+        stack_status = None
+
+        try:
+            for event, stack_status in self._wait_for_stack(stack_id,
+                                                            last_event_id):
+                yield event
+        except StackUpdateError:
+            raise StackUpdateError(
+                'No stacks found for the newly-updated stack ID "%s"'
+                % stack_id)
+
+        if stack_status != 'UPDATE_COMPLETE':
+            raise StackUpdateError(
+                'Stack update failed. Got status: "%s"'
                 % stack_status)
 
     def delete_stack(self, stack_id):

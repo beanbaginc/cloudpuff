@@ -7,3 +7,7 @@ class StackCreationError(Exception):
 
 class StackLookupError(Exception):
     """Error looking up a stack on CloudFormation."""
+
+
+class StackUpdateError(Exception):
+    """Error updating an existing stack."""

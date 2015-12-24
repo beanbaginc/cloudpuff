@@ -27,17 +27,38 @@ class ListStacks(BaseCommand):
             action='store_true',
             default=False,
             help='Output as JSON.')
+        parser.add_argument(
+            'stack_names',
+            metavar='NAME',
+            nargs='*',
+            help='Limit results to the given stack name(s).')
 
     def main(self):
         cf = CloudFormation(self.options.region)
 
-        if self.options.json:
-            self._print_stacks_json(cf)
-        else:
-            self._print_stacks(cf)
+        stacks = cf.lookup_stacks()
 
-    def _print_stacks_json(self, cf):
-        """Print the list of stacks as pretty-printed JSON."""
+        if self.options.stack_names:
+            stack_names = set(self.options.stack_names)
+
+            stacks = [
+                stack
+                for stack in stacks
+                if stack.stack_name in stack_names
+            ]
+
+        if self.options.json:
+            self._print_stacks_json(stacks)
+        else:
+            self._print_stacks(stacks)
+
+    def _print_stacks_json(self, stacks):
+        """Print the list of stacks as pretty-printed JSON.
+
+        Args:
+            stacks (list of boto.cloudformation.stack.Stack):
+                List of stacks to print.
+        """
         print(json.dumps(
             [
                 {
@@ -48,18 +69,23 @@ class ListStacks(BaseCommand):
                     'created': stack.creation_time.isoformat(),
                     'outputs': dict(
                         (output.key, output.value)
-                        for output in stack.outputs
+                        for output in stacks
                     ),
                 }
-                for stack in cf.lookup_stacks()
+                for stack in stacks
             ],
             indent=2))
 
-    def _print_stacks(self, cf):
-        """Print the list of stacks as formatted console output."""
+    def _print_stacks(self, stacks):
+        """Print the list of stacks as formatted console output.
+
+        Args:
+            stacks (list of boto.cloudformation.stack.Stack):
+                List of stacks to print.
+        """
         first = True
 
-        for stack in cf.lookup_stacks():
+        for stack in stacks:
             if first:
                 first = False
             else:

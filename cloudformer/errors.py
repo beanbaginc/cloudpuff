@@ -2,4 +2,8 @@ from __future__ import unicode_literals
 
 
 class StackCreationError(Exception):
-    pass
+    """Error creating a new stack."""
+
+
+class StackLookupError(Exception):
+    """Error looking up a stack on CloudFormation."""

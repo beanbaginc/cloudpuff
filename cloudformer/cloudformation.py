@@ -4,7 +4,7 @@ import time
 
 import boto.cloudformation
 
-from cloudformer.errors import StackCreationError
+from cloudformer.errors import StackCreationError, StackLookupError
 
 
 class CloudFormation(object):
@@ -28,6 +28,41 @@ class CloudFormation(object):
         """
         return self.cnx.describe_stacks()
 
+    def lookup_stack(self, stack_name):
+        """Return the stack with the given name.
+
+        Args:
+            stack_name (unicode):
+                The name of the stack to look up.
+
+        Returns:
+            boto.cloudformation.stack.Stack:
+            The resulting stack.
+
+        Raises:
+            cloudformer.errors.StackLookupError:
+                The stack could not be found.
+        """
+        stacks = self.cnx.describe_stacks(stack_name)
+
+        if not stacks:
+            raise StackLookupError('The stack "%s" was not found' % stack_name)
+
+        return stacks[0]
+
+    def lookup_stack_events(self, stack_name):
+        """Look up all events for a stack.
+
+        Args:
+            stack_name (unicode):
+                The name of the stack to look up events for.
+
+        Returns:
+            list of boto.cloudformation.stack.StackEvent:
+            The list of events on the stack, in order of newest to oldest.
+        """
+        return self.cnx.describe_stack_events(stack_name)
+
     def validate_template(self, template_body):
         """Validate the given template string."""
         return self.cnx.validate_template(template_body)
@@ -37,11 +72,38 @@ class CloudFormation(object):
                               tags={}, timeout_mins=DEFAULT_TIMEOUT_MINS):
         """Create a stack and wait for it to complete.
 
-        Once the stack has been successfully created, a
-        boto.cloudformation.stack.Stack will be returned.
+        As changes are made to the stack, events will be yielded to the caller,
+        until the update either finishes or fails.
 
-        If there's any problem in creating the stack, a StackCreationError
-        will be raised.
+        Args:
+            stack_name (unicode):
+                The name of the new stack.
+
+            template_body (unicode):
+                The template to use for the stack.
+
+            params (list of tuple):
+                The parameters to pass to the stack, in the form of a list
+                of tuple of key/value pairs.
+
+            rollback_on_error (bool, optional):
+                Whether to roll back the stack changes if there's an error.
+                If ``False``, the stack will be deleted on error.
+
+            tags (dict, optional):
+                Tags to apply to the stack.
+
+            timeout_mins (int, optional):
+                The amount of time to wait without any activity before
+                giving up.
+
+        Yields:
+            boto.cloudformation.stack.StackEvent:
+            Events for changes being performed.
+
+        Raises:
+            cloudformer.errors.StackCreateError:
+                An error creating the stack.
         """
         stack_id = self.cnx.create_stack(
             stack_name,
@@ -53,29 +115,68 @@ class CloudFormation(object):
             capabilities=['CAPABILITY_IAM'])
 
         stack = None
+        stack_status = None
 
-        while True:
-            stacks = self.cnx.describe_stacks(stack_id)
+        try:
+            for event, stack_status in self._wait_for_stack(stack_id):
+                yield event
+        except StackLookupError:
+            raise StackCreationError(
+                'No stacks found for the newly-created stack ID "%s"'
+                % stack_id)
 
-            if not stacks:
-                raise StackCreationError(
-                    'No stacks found for the newly-created stack ID "%s"'
-                    % stack_id)
-
-            stack = stacks[0]
-
-            if stack.stack_status != 'CREATE_IN_PROGRESS':
-                break
-
-            time.sleep(30)
-
-        if stack.stack_status != 'CREATE_COMPLETE':
+        if stack_status != 'CREATE_COMPLETE':
             raise StackCreationError(
                 'Stack creation failed. Got status: "%s"'
-                % stack.stack_status)
-
-        return stack
+                % stack_status)
 
     def delete_stack(self, stack_id):
         """Delete an existing stack."""
         self.cnx.delete_stack(stack_id)
+
+    def _wait_for_stack(self, stack_name, last_event_id=None):
+        """Wait for a create/update stack operation to complete.
+
+        As changes are made to the stack, events will be yielded to the caller,
+        until the update either finishes or fails.
+
+        Args:
+            stack_name (unicode):
+                The name of the stack.
+
+            last_event_id (unicode, optional):
+                The last known event ID. If specified, only events made after
+                this ID will be yielded.
+
+        Yields:
+            tuple:
+            A tuple of (:py:class:`boto.cloudformation.stack.StackEvent`,
+            unicode).
+
+            The first item in the tuple is the next event returned. The
+            second is the stack status shown at last fetch (immediately
+            prior to the current batch of events being processed).
+        """
+        while True:
+            stack = self.lookup_stack(stack_name)
+            events = self.lookup_stack_events(stack_name)
+            stack_status = stack.stack_status
+
+            found_current_event = False
+            new_events = []
+
+            for event in events:
+                if event.event_id == last_event_id:
+                    break
+
+                new_events.append(event)
+
+            for event in reversed(new_events):
+                yield event, stack_status
+
+            last_event_id = events[0].event_id
+
+            if not stack_status.endswith('IN_PROGRESS'):
+                break
+
+            time.sleep(2)

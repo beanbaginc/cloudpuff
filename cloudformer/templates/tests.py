@@ -213,6 +213,17 @@ class TemplateReaderTests(TestCase):
                 ]
             })
 
+    def test_embed_funcs_with_base64(self):
+        """Testing TemplateReader with embedding Base64()"""
+        reader = TemplateReader()
+        reader.load_string('key: <% Base64("abc123") %>')
+
+        self.assertEqual(
+            reader.doc['key'],
+            {
+                'Fn::Base64': 'abc123',
+            })
+
     def test_embed_funcs_with_if(self):
         """Testing TemplateReader with embedding <% If %>"""
         reader = TemplateReader()

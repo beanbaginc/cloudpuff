@@ -11,7 +11,7 @@ from cloudformer.templates.state import (IfCondition, UncollapsibleList,
 
 # CloudFormation functions, optionally with opening blocks
 FUNC_RE = re.compile(
-    r'<%\s*(?P<func_name>[A-Za-z]+)\s*'
+    r'<%\s*(?P<func_name>[A-Za-z][A-Za-z0-9]+)\s*'
     r'(\((?P<params>(.*))\))?'
     r'(?P<func_open>\s*{)?\s*%>\n?')
 
@@ -369,6 +369,27 @@ class ElseBlockFunction(BlockFunction):
             raise ConstructorError('Found Else without a matching If')
 
 
+class Base64Function(Function):
+    """A wrapper around Fn::Base64."""
+
+    @classmethod
+    def parse_params(cls, params_str, process_string_func):
+        """Parse the parameters to the Base64 function.
+
+        Unlike most functions, Base64 does not take a list of arguments,
+        but rather takes a single argument. This processes the parameters
+        as a single argument.
+        """
+        params = Function.parse_params(params_str, process_string_func)
+
+        if len(params) > 1:
+            raise ConstructorError('Too many parameters passed to Base64')
+        elif len(params) == 1:
+            return params[0]
+        else:
+            return ''
+
+
 class GetAZsFunction(Function):
     """A wrapper around Fn::GetAZs, for getting availability zones."""
 
@@ -449,6 +470,7 @@ class StringParser(object):
     ]))
 
     FUNCTIONS = {
+        'Base64': Base64Function,
         'If': IfBlockFunction,
         'ElseIf': IfBlockFunction,
         'Else': ElseBlockFunction,

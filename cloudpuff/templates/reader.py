@@ -7,8 +7,8 @@ from collections import OrderedDict
 import yaml
 from yaml.constructor import ConstructorError
 
-from cloudformer.templates.state import TemplateState, VarReference
-from cloudformer.templates.string_parser import StringParser
+from cloudpuff.templates.state import TemplateState, VarReference
+from cloudpuff.templates.string_parser import StringParser
 
 
 class TemplateLoader(yaml.Loader):

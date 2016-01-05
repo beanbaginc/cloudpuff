@@ -4,9 +4,9 @@ import re
 
 from yaml.constructor import ConstructorError
 
-from cloudformer.templates.expression_parser import ExpressionParser
-from cloudformer.templates.state import (IfCondition, UncollapsibleList,
-                                         VarReference, VarsStringsList)
+from cloudpuff.templates.expression_parser import ExpressionParser
+from cloudpuff.templates.state import (IfCondition, UncollapsibleList,
+                                       VarReference, VarsStringsList)
 
 
 # CloudFormation functions, optionally with opening blocks

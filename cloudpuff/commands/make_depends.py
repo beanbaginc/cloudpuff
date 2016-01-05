@@ -1,7 +1,7 @@
 from __future__ import print_function, unicode_literals
 
-from cloudformer.commands import BaseCommand, run_command
-from cloudformer.templates import TemplateReader
+from cloudpuff.commands import BaseCommand, run_command
+from cloudpuff.templates import TemplateReader
 
 
 class MakeDepends(BaseCommand):

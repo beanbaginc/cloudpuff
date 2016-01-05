@@ -6,11 +6,11 @@ import textwrap
 
 from colorama import Fore, Style, init as init_colorama
 
-from cloudformer.utils.log import init_logging
+from cloudpuff.utils.log import init_logging
 
 
 class BaseCommand(object):
-    """Base class for a cloudformer command.
+    """Base class for a cloudpuff command.
 
     This takes care of the standard setup and argument parsing for a command.
     """

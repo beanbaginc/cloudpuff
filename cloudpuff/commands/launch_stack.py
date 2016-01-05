@@ -8,12 +8,12 @@ from datetime import datetime
 import six
 from colorama import Fore, Style
 
-from cloudformer.cloudformation import CloudFormation
-from cloudformer.commands import BaseCommand, run_command
-from cloudformer.errors import (StackCreationError, StackUpdateError,
-                                StackUpdateNotRequired)
-from cloudformer.templates import TemplateCompiler
-from cloudformer.utils.console import prompt_template_param
+from cloudpuff.cloudformation import CloudFormation
+from cloudpuff.commands import BaseCommand, run_command
+from cloudpuff.errors import (StackCreationError, StackUpdateError,
+                              StackUpdateNotRequired)
+from cloudpuff.templates import TemplateCompiler
+from cloudpuff.utils.console import prompt_template_param
 
 
 class LaunchStack(BaseCommand):
@@ -258,7 +258,7 @@ class LaunchStack(BaseCommand):
             params (dict):
                 Parameters already provided for the template.
 
-            compiler (cloudformer.compiler.TemplateCompiler):
+            compiler (cloudpuff.compiler.TemplateCompiler):
                 The compiler used to compile this template.
 
         Returns:

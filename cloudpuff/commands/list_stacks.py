@@ -8,11 +8,11 @@ from datetime import datetime
 import six
 from colorama import Fore, Style
 
-from cloudformer.cloudformation import CloudFormation
-from cloudformer.commands import BaseCommand, run_command
-from cloudformer.errors import StackCreationError
-from cloudformer.templates import TemplateCompiler
-from cloudformer.utils.console import prompt_template_param
+from cloudpuff.cloudformation import CloudFormation
+from cloudpuff.commands import BaseCommand, run_command
+from cloudpuff.errors import StackCreationError
+from cloudpuff.templates import TemplateCompiler
+from cloudpuff.utils.console import prompt_template_param
 
 
 class ListStacks(BaseCommand):

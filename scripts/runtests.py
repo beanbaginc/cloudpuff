@@ -12,7 +12,7 @@ def run_tests():
         'runtests.py',
         '-v',
         '--with-coverage',
-        '--cover-package=cloudformer',
+        '--cover-package=cloudpuff',
     ]
 
     if len(sys.argv) > 2:

@@ -3,12 +3,12 @@ from __future__ import unicode_literals
 import os
 import sys
 
-from cloudformer.commands import BaseCommand, run_command
-from cloudformer.templates import TemplateCompiler
+from cloudpuff.commands import BaseCommand, run_command
+from cloudpuff.templates import TemplateCompiler
 
 
 class CompileTemplate(BaseCommand):
-    """Compiles a CloudFormer template into a CloudFormation template."""
+    """Compiles a CloudPuff template into a CloudFormation template."""
 
     def add_options(self, parser):
         parser.add_argument('-o', '--out',

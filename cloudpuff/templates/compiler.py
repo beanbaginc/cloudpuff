@@ -6,12 +6,12 @@ from collections import OrderedDict
 
 import six
 
-from cloudformer.errors import InvalidTagError
-from cloudformer.templates.reader import TemplateReader
+from cloudpuff.errors import InvalidTagError
+from cloudpuff.templates.reader import TemplateReader
 
 
 class TemplateCompiler(object):
-    """Compiles a CloudFormer template to a CloudFormation template.
+    """Compiles a CloudPuff template to a CloudFormation template.
 
     The compiled template will be accessible through the ``doc``
     attribute.
@@ -27,7 +27,7 @@ class TemplateCompiler(object):
         self.stack_param_lookups = {}
 
     def load_string(self, s, name=None):
-        """Load a CloudFormer template from a string.
+        """Load a CloudPuff template from a string.
 
         Args:
             s (unicode):
@@ -77,9 +77,9 @@ class TemplateCompiler(object):
         # Look for any parameters that reference outputs from other stacks.
         self._scan_referenced_stack_params()
 
-        # Look for any metadata specific to CloudFormer that we want to
+        # Look for any metadata specific to CloudPuff that we want to
         # process.
-        self._scan_cloudformer_metadata()
+        self._scan_cloudpuff_metadata()
 
         # Clean up any sections not being used.
         for section in self.SECTIONS:
@@ -87,7 +87,7 @@ class TemplateCompiler(object):
                 del self.doc[section]
 
     def load_file(self, filename):
-        """Load a CloudFormer template from disk."""
+        """Load a CloudPuff template from disk."""
         generic_stack_name = \
             '.'.join(os.path.basename(filename).split('.')[:-1])
         generic_stack_name = generic_stack_name.replace('_', '-')
@@ -154,16 +154,16 @@ class TemplateCompiler(object):
             if lookup_from_stack:
                 self.stack_param_lookups[param_name] = lookup_from_stack
 
-    def _scan_cloudformer_metadata(self):
+    def _scan_cloudpuff_metadata(self):
         ami_metadata = []
 
         for resource_name, resource in six.iteritems(self.doc['Resources']):
             if (not isinstance(resource, dict) or
                 resource.get('Type') != 'AWS::EC2::Instance' or
-                'CloudFormer' not in resource.get('Metadata', {})):
+                'CloudPuff' not in resource.get('Metadata', {})):
                 continue
 
-            metadata = resource['Metadata']['CloudFormer']
+            metadata = resource['Metadata']['CloudPuff']
 
             if 'AMINameFormat' in metadata:
                 ami_info = {
@@ -183,9 +183,9 @@ class TemplateCompiler(object):
             # Create individual outputs for each AMI we need to generate.
             for metadata in ami_metadata:
                 resource_name = metadata['resource_name']
-                previous_ami_key = 'CloudFormer%sPreviousAMI' % resource_name
-                instance_id_key = 'CloudFormer%sInstanceID' % resource_name
-                name_format_key = 'CloudFormer%sAMINameFormat' % resource_name
+                previous_ami_key = 'CloudPuff%sPreviousAMI' % resource_name
+                instance_id_key = 'CloudPuff%sInstanceID' % resource_name
+                name_format_key = 'CloudPuff%sAMINameFormat' % resource_name
 
                 output = OrderedDict()
                 output['Description'] = 'Instance ID for %s' % resource_name

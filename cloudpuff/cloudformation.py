@@ -6,7 +6,7 @@ import boto.cloudformation
 import six
 from boto.exception import BotoServerError
 
-from cloudformer.errors import (StackCreationError, StackLookupError,
+from cloudpuff.errors import (StackCreationError, StackLookupError,
                                 StackUpdateError, StackUpdateNotRequired)
 
 
@@ -69,7 +69,7 @@ class CloudFormation(object):
             The resulting stack.
 
         Raises:
-            cloudformer.errors.StackLookupError:
+            cloudpuff.errors.StackLookupError:
                 The stack could not be found.
         """
         stacks = self.cnx.describe_stacks(stack_name)
@@ -130,7 +130,7 @@ class CloudFormation(object):
             Events for changes being performed.
 
         Raises:
-            cloudformer.errors.StackCreateError:
+            cloudpuff.errors.StackCreateError:
                 An error creating the stack.
         """
         stack_id = self.cnx.create_stack(
@@ -191,7 +191,7 @@ class CloudFormation(object):
             Events for changes being performed.
 
         Raises:
-            cloudformer.errors.StackUpdateError:
+            cloudpuff.errors.StackUpdateError:
                 An error updating the stack.
         """
         last_event_id = self.lookup_stack_events(stack_name)[0].event_id

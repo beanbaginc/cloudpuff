@@ -5,8 +5,8 @@ import shutil
 import tempfile
 from unittest import TestCase
 
-from cloudformer.templates import TemplateCompiler, TemplateReader
-from cloudformer.templates.state import IfCondition, VarReference
+from cloudpuff.templates import TemplateCompiler, TemplateReader
+from cloudpuff.templates.state import IfCondition, VarReference
 
 
 class TemplateCompilerTests(TestCase):
@@ -1211,7 +1211,7 @@ class TemplateReaderTests(TestCase):
 
     def test_statement_import(self):
         """Testing TemplateReader with !import"""
-        tempdir = tempfile.mkdtemp(prefix='cloudformer-tests')
+        tempdir = tempfile.mkdtemp(prefix='cloudpuff-tests')
         filename = os.path.join(tempdir, 'defs.yaml')
 
         with open(filename, 'w') as fp:

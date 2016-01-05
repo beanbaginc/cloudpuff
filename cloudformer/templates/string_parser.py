@@ -414,9 +414,11 @@ class GetAZsFunction(Function):
 class SelectFunction(Function):
     """A wrapper around Fn::Select, for indexing into a list."""
 
-    SELECT_PARAMS_RE = re.compile(
-        r'^(?P<index>\d+),\s*'
-        r'(\[(?P<array>.+)\]|' + REFERENCE_RE.pattern + ')$')
+    SELECT_PARAMS_RE = re.compile('(%s)' % '|'.join([
+        r'^(?P<index>\d+),\s*(\[(?P<array>.+)\]',
+        REFERENCE_RE.pattern,
+        r'(?P<func>[A-Za-z]*\(.*\)))$'
+    ]))
 
     ARRAY_ITEM_RE = re.compile('(%s)' % '|'.join([
         '"[^"]+"',
@@ -450,6 +452,11 @@ class SelectFunction(Function):
                 ])
             ]
 
+        func = m.group('func')
+
+        if func:
+            return [index, process_string_func('<%% %s %%>' % func)]
+
         ref = m.group('ref_name')
 
         if ref:
@@ -457,6 +464,25 @@ class SelectFunction(Function):
 
         # We shouldn't be able to reach here.
         assert False
+
+    def serialize(self):
+        """Serialize the Select call to a function.
+
+        Returns:
+            dict:
+            The CloudFormation representation of this function.
+        """
+        norm_func_name = self.normalize_function_name()
+
+        assert len(self.params) == 2
+        index, container = self.params
+
+        if not isinstance(container, UncollapsibleList):
+            container = self.normalize_content(container)
+
+        return {
+            norm_func_name: [index, container],
+        }
 
 
 class StringParser(object):

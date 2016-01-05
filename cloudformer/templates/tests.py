@@ -811,6 +811,42 @@ class TemplateReaderTests(TestCase):
                 ]
             })
 
+    def test_embed_funcs_with_select_and_funcs(self):
+        """Testing TemplateReader with embedding Select() with nested functions"""
+        reader = TemplateReader()
+        reader.load_string(
+            'key: <% Select(2, GetAZs()) %>')
+
+        self.assertEqual(
+            reader.doc['key'],
+            {
+                'Fn::Select': [
+                    '2',
+                    {
+                        'Fn::GetAZs': '',
+                    },
+                ]
+            })
+
+    def test_embed_funcs_with_select_and_funcs_with_args(self):
+        """Testing TemplateReader with embedding Select() with nested functions with arguments"""
+        reader = TemplateReader()
+        reader.load_string(
+            'key: <% Select(2, GetAZs(@@AWS::Region)) %>')
+
+        self.assertEqual(
+            reader.doc['key'],
+            {
+                'Fn::Select': [
+                    '2',
+                    {
+                        'Fn::GetAZs': {
+                            'Ref': 'AWS::Region',
+                        },
+                    },
+                ]
+            })
+
     def test_embed_vars_in_keys(self):
         """Testing TemplateReader with embedding $$variables in keys"""
         reader = TemplateReader()

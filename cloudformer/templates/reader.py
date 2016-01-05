@@ -7,7 +7,7 @@ from collections import OrderedDict
 import yaml
 from yaml.constructor import ConstructorError
 
-from cloudformer.templates.state import TemplateState
+from cloudformer.templates.state import TemplateState, VarReference
 from cloudformer.templates.string_parser import StringParser
 
 
@@ -280,7 +280,7 @@ class TemplateLoader(yaml.Loader):
         tags = []
 
         for key, value in values.iteritems():
-            if not isinstance(value, dict):
+            if not isinstance(value, (dict, VarReference)):
                 value = unicode(value)
 
             tag = OrderedDict()

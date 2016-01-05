@@ -10,7 +10,8 @@ from colorama import Fore, Style
 
 from cloudformer.cloudformation import CloudFormation
 from cloudformer.commands import BaseCommand, run_command
-from cloudformer.errors import StackCreationError, StackUpdateError
+from cloudformer.errors import (StackCreationError, StackUpdateError,
+                                StackUpdateNotRequired)
 from cloudformer.templates import TemplateCompiler
 from cloudformer.utils.console import prompt_template_param
 
@@ -37,14 +38,6 @@ class LaunchStack(BaseCommand):
         'UPDATE_ROLLBACK_FAILED': 'Failed to roll back update for',
         'UPDATE_ROLLBACK_IN_PROGRESS': 'Rolling back update for',
     }
-
-    ICON_ERROR = '\u2717'
-    ICON_SUCCESS = '\u2713'
-    ICON_PROGRESS = '\u25ba'
-
-    STYLED_ICON_ERROR = Fore.RED + ICON_ERROR + Style.RESET_ALL
-    STYLED_ICON_SUCCESS = Fore.GREEN + ICON_SUCCESS + Style.RESET_ALL
-    STYLED_ICON_PROGRESS = Fore.YELLOW + ICON_PROGRESS + Style.RESET_ALL
 
     def add_options(self, parser):
         parser.add_argument(
@@ -105,8 +98,6 @@ class LaunchStack(BaseCommand):
         self.cf = CloudFormation(self.options.region)
         result = self.cf.validate_template(template_body)
 
-        print()
-
         if self.options.update:
             stack_name = self.options.stack_name
             stack = self.cf.lookup_stack(stack_name)
@@ -159,16 +150,21 @@ class LaunchStack(BaseCommand):
                     params=params,
                     tags=compiler.get_tags(params),
                     rollback_on_error=self.options.rollback))
+            except StackUpdateNotRequired as e:
+                print()
+                self.print_success('The stack is already up-to-date!')
+                return
             except StackUpdateError as e:
-                print()
-                print('%s Updating the stack has failed.'
-                      % self.STYLED_ICON_ERROR)
-                print()
-                print('You can update the template and try again with:')
-                print()
-                print('%s$%s %s -u -k --stack-name=%s --template %s'
-                      % (Fore.CYAN, Style.RESET_ALL, sys.argv[0],
-                         stack_name, template_file))
+                sys.stderr.write('\n')
+                self.print_error('Updating the stack has failed.')
+                sys.stderr.write('\n')
+                sys.stderr.write('You can update the template and try again '
+                                 'with:\n')
+                sys.stderr.write('\n')
+                sys.stderr.write('%s$%s %s -u -k --stack-name=%s --template '
+                                 '%s\n'
+                                 % (Fore.CYAN, Style.RESET_ALL, sys.argv[0],
+                                    stack_name, template_file))
                 sys.exit(1)
         else:
             stack_name = (self.options.stack_name or
@@ -186,15 +182,14 @@ class LaunchStack(BaseCommand):
                     tags=compiler.get_tags(params),
                     rollback_on_error=self.options.rollback))
             except StackCreationError as e:
-                print()
-                print('%s Creating the stack has failed.'
-                      % self.STYLED_ICON_ERROR)
-                print()
-                print('Delete the stack and try again.')
+                sys.stderr.write('\n')
+                self.print_error('Creating the stack has failed.')
+                sys.stderr.write('\n')
+                sys.stderr.write('Delete the stack and try again.\n')
                 sys.exit(1)
 
         print()
-        print('%s The stack has been launched!' % self.STYLED_ICON_SUCCESS)
+        self.print_success('The stack has been launched!')
         print()
         print('%sStack ID:%s %s' %
               (Style.BRIGHT, Style.RESET_ALL, stack_name))

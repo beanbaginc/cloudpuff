@@ -15,3 +15,7 @@ class StackLookupError(Exception):
 
 class StackUpdateError(Exception):
     """Error updating an existing stack."""
+
+
+class StackUpdateNotRequired(StackUpdateError):
+    """An attempted stack update was not required."""

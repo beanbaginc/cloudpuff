@@ -46,3 +46,7 @@ def init_logging(debug=False):
         '[%(name)s] %(levelname)s: %(message)s'))
     handler.setLevel(logging.WARNING)
     root.addHandler(handler)
+
+    # Disable all non-critical errors from boto. We want to catch them and
+    # handle them ourselves.
+    logging.getLogger('boto').setLevel(logging.CRITICAL)

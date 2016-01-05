@@ -3,9 +3,10 @@ from __future__ import unicode_literals
 import time
 
 import boto.cloudformation
+from boto.exception import BotoServerError
 
 from cloudformer.errors import (StackCreationError, StackLookupError,
-                                StackUpdateError)
+                                StackUpdateError, StackUpdateNotRequired)
 
 
 class CloudFormation(object):
@@ -170,14 +171,20 @@ class CloudFormation(object):
         """
         last_event_id = self.lookup_stack_events(stack_name)[0].event_id
 
-        stack_id = self.cnx.update_stack(
-            stack_name,
-            template_body=template_body,
-            parameters=params,
-            timeout_in_minutes=timeout_mins,
-            disable_rollback=not rollback_on_error,
-            tags=tags,
-            capabilities=['CAPABILITY_IAM'])
+        try:
+            stack_id = self.cnx.update_stack(
+                stack_name,
+                template_body=template_body,
+                parameters=params,
+                timeout_in_minutes=timeout_mins,
+                disable_rollback=not rollback_on_error,
+                tags=tags,
+                capabilities=['CAPABILITY_IAM'])
+        except BotoServerError as e:
+            if e.message == 'No updates are to be performed.':
+                raise StackUpdateNotRequired(e.message)
+            else:
+                raise StackUpdateError(e.message)
 
         stack = None
         stack_status = None

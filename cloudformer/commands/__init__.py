@@ -1,10 +1,10 @@
-from __future__ import unicode_literals
+from __future__ import print_function, unicode_literals
 
 import argparse
 import sys
 import textwrap
 
-from colorama import init as init_colorama
+from colorama import Fore, Style, init as init_colorama
 
 from cloudformer.utils.log import init_logging
 
@@ -14,6 +14,14 @@ class BaseCommand(object):
 
     This takes care of the standard setup and argument parsing for a command.
     """
+
+    ICON_ERROR = '\u2717'
+    ICON_SUCCESS = '\u2713'
+    ICON_PROGRESS = '\u25ba'
+
+    STYLED_ICON_ERROR = Fore.RED + ICON_ERROR + Style.RESET_ALL
+    STYLED_ICON_SUCCESS = Fore.GREEN + ICON_SUCCESS + Style.RESET_ALL
+    STYLED_ICON_PROGRESS = Fore.YELLOW + ICON_PROGRESS + Style.RESET_ALL
 
     def main(self):
         raise NotImplementedError
@@ -63,6 +71,30 @@ class BaseCommand(object):
         argument parser.
         """
         pass
+
+    def print_error(self, s):
+        """Print an error to the console.
+
+        Args:
+            s (unicode):
+                The error string to print.
+        """
+        sys.stderr.write(textwrap.fill(
+            s,
+            initial_indent='%s ' % self.STYLED_ICON_ERROR,
+            subsequent_indent='  '))
+
+    def print_success(self, s):
+        """Print a success message to the console.
+
+        Args:
+            s (unicode):
+                The string to print.
+        """
+        print(textwrap.fill(
+            s,
+            initial_indent='%s ' % self.STYLED_ICON_SUCCESS,
+            subsequent_indent='  '))
 
 
 def run_command(cmd_class):

@@ -74,6 +74,9 @@ class TemplateCompiler(object):
         if template_state.if_conditions:
             self.doc['Conditions'].update(template_state.if_conditions)
 
+        # Look for any parameters that reference outputs from other stacks.
+        self._scan_referenced_stack_params()
+
         # Look for any metadata specific to CloudFormer that we want to
         # process.
         self._scan_cloudformer_metadata()
@@ -135,6 +138,21 @@ class TemplateCompiler(object):
             tags[tag_name] = tag_value
 
         return tags
+
+    def _scan_referenced_stack_params(self):
+        """Scan the list of parameters for those referencing external stacks.
+
+        Any parameter containing a ``LookupFromStack`` will be specially
+        tracked in :py:attr:`stack_param_lookups` so that data from those
+        parameters can be scanned from an external stack later.
+        """
+        for param_name, param in six.iteritems(self.doc['Parameters']):
+            # Grab the data and delete it from the parameter, so that
+            # CloudFormation doesn't get confused by it.
+            lookup_from_stack = param.pop('LookupFromStack', None)
+
+            if lookup_from_stack:
+                self.stack_param_lookups[param_name] = lookup_from_stack
 
     def _scan_cloudformer_metadata(self):
         ami_metadata = []

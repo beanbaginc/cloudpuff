@@ -97,17 +97,17 @@ class LaunchStack(BaseCommand):
 
         self.cf = CloudFormation(self.options.region)
         result = self.cf.validate_template(template_body)
+        template_params = result.template_parameters
 
         if self.options.update:
             stack_name = self.options.stack_name
             stack = self.cf.lookup_stack(stack_name)
 
-            stack_params = dict([
+            stack_params = dict(
                 (param.key, param.value)
                 for param in stack.parameters
-            ])
+            )
 
-            template_params = result.template_parameters
             new_template_params = []
             template_param_keys = set()
 
@@ -129,16 +129,20 @@ class LaunchStack(BaseCommand):
                     if template_param.parameter_key not in stack_params
                 ]
 
-            params = self._get_template_params(template_params)
+            params = self._get_template_params(
+                template_params,
+                ignore_params=list(compiler.stack_param_lookups.keys()))
 
             if self.options.keep_params:
                 # Add any existing stack parameters to the list here. Only
                 # include those that exist in the current template.
-                params += [
+                params.update(dict(
                     (param_key, param_value)
                     for param_key, param_value in six.iteritems(stack_params)
                     if param_key in template_param_keys
-                ]
+                ))
+
+            params = self._lookup_stack_params(params, compiler)
 
             print('Updating the CloudFormation stack.')
             print('Please wait. This may take several minutes...')
@@ -169,7 +173,10 @@ class LaunchStack(BaseCommand):
         else:
             stack_name = (self.options.stack_name or
                           self._generate_stack_name(generic_stack_name))
-            params = self._get_template_params(result.template_parameters)
+            params = self._get_template_params(
+                template_params,
+                ignore_params=list(compiler.stack_param_lookups.keys()))
+            params = self._lookup_stack_params(params, compiler)
 
             print('Creating the CloudFormation stack.')
             print('Please wait. This may take several minutes...')
@@ -210,13 +217,26 @@ class LaunchStack(BaseCommand):
         return '%s-%s' % (base_stack_name,
                           datetime.now().strftime('%Y%m%d%H%M%S'))
 
-    def _get_template_params(self, template_parameters):
+    def _get_template_params(self, template_parameters, ignore_params=[]):
         """Return values for all needed template parameters.
 
         Any parameters needed by the template that weren't provided on the
         command line will be requested on the console. Users will get the
         key name, default value, and a description, and will be prompted for
         a suitable value for the template.
+
+        Args:
+            template_parameters (list):
+                A list of
+                :py:class:`~boto.cloudformation.template.TemplateParameter`,
+                each representing a parameter from the validator.
+
+            ignore_params (list, optional):
+                A list of parameter names to ignore.
+
+        Returns:
+            dict:
+            The resulting parameters.
         """
         params = dict(
             param.split('=', 1)
@@ -224,12 +244,87 @@ class LaunchStack(BaseCommand):
         )
 
         for template_param in template_parameters:
-            key = template_param.parameter_key
+            param_name = template_param.parameter_key
 
-            if key not in params:
-                params[key] = prompt_template_param(template_param)
+            if param_name not in params and param_name not in ignore_params:
+                params[param_name] = prompt_template_param(template_param)
 
-        return list(params.items())
+        return params
+
+    def _lookup_stack_params(self, params, compiler):
+        """Look up parameter values from referenced stacks.
+
+        Args:
+            params (dict):
+                Parameters already provided for the template.
+
+            compiler (cloudformer.compiler.TemplateCompiler):
+                The compiler used to compile this template.
+
+        Returns:
+            dict:
+            The resulting parameters.
+        """
+        stack_param_lookups = compiler.stack_param_lookups
+        stack_outputs = {}
+        all_stacks = self.cf.lookup_stacks()
+
+        # Go through all external stack parameter lookups requested by this
+        # template, and try to find the appropriate stacks.
+        for param_name, lookup_info in six.iteritems(stack_param_lookups):
+            stack_name = lookup_info['StackName']
+            required_tags = {
+                'GenericStackName': stack_name,
+            }
+
+            for tag_name in lookup_info['MatchStackTags']:
+                required_tags[tag_name] = params[tag_name]
+
+            key = tuple(six.iteritems(required_tags))
+
+            if key not in stack_outputs:
+                # We don't have anything for this stack yet, so try to find
+                # the stack and cache it.
+                stacks = self.cf.lookup_stacks(
+                    statuses=('CREATE_COMPLETE', 'UPDATE_COMPLETE',
+                              'UPDATE_ROLLBACK_COMPLETE'),
+                    tags=required_tags)
+
+                if len(stacks) == 0:
+                    self.print_error(
+                        'Could not find a stack "%s", as needed by the '
+                        'stack parameter "%s".'
+                        % (stack_name, param_name))
+                    sys.exit(1)
+                elif len(stacks) != 1:
+                    # TODO: Allow the user to select a stack.
+                    self.print_error(
+                        'There were too many stacks returned named "%s" '
+                        'matching the criteria for stack parameter "%s".'
+                        % (stack_name, param_name))
+                    sys.exit(1)
+
+                stack_outputs[key] = dict(
+                    (output.key, output.value)
+                    for output in stacks[0].outputs
+                )
+
+            outputs = stack_outputs[key]
+            output_name = lookup_info['OutputName']
+
+            for output in stacks[0].outputs:
+                if output.key == output_name:
+                    params[param_name] = output.value
+                    break
+
+            if param_name not in params:
+                self.print_error(
+                    'Could not find the output "%s" in the stack "%s", as '
+                    'needed by the stack parameter "%s".'
+                    % (output_name, stack_name, param_name))
+                sys.exit(1)
+
+        return params
 
     def _print_events(self, events):
         """Print stack events to the console as they come in.

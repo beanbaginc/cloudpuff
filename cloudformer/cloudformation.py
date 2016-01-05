@@ -3,6 +3,7 @@ from __future__ import unicode_literals
 import time
 
 import boto.cloudformation
+import six
 from boto.exception import BotoServerError
 
 from cloudformer.errors import (StackCreationError, StackLookupError,
@@ -21,14 +22,40 @@ class CloudFormation(object):
     def __init__(self, region):
         self.cnx = boto.cloudformation.connect_to_region(region)
 
-    def lookup_stacks(self):
-        """Return all stacks known to CloudFormation.
+    def lookup_stacks(self, statuses=None, tags={}):
+        """Return stacks known to CloudFormation.
+
+        This can be filtered down by providing one or more valid status strings
+        and/or tags that must match those in the stack.
+
+        Args:
+            statuses (list, optional):
+                A list of valid statuses for the stack.
+
+            tags (dict, optional):
+                Tags and their values that must be present on the stack.
 
         Returns:
             list of boto.cloudformation.stack.Stack:
             The list of stacks.
         """
-        return self.cnx.describe_stacks()
+        stacks = self.cnx.describe_stacks()
+
+        if statuses:
+            stacks = (
+                stack
+                for stack in stacks
+                if stack.stack_status in statuses
+            )
+
+        if tags:
+            stacks = (
+                stack
+                for stack in stacks
+                if self._get_stack_has_tags(stack, tags)
+            )
+
+        return list(stacks)
 
     def lookup_stack(self, stack_name):
         """Return the stack with the given name.
@@ -84,9 +111,8 @@ class CloudFormation(object):
             template_body (unicode):
                 The template to use for the stack.
 
-            params (list of tuple):
-                The parameters to pass to the stack, in the form of a list
-                of tuple of key/value pairs.
+            params (dict):
+                The parameters to pass to the stack.
 
             rollback_on_error (bool, optional):
                 Whether to roll back the stack changes if there's an error.
@@ -110,7 +136,7 @@ class CloudFormation(object):
         stack_id = self.cnx.create_stack(
             stack_name,
             template_body=template_body,
-            parameters=params,
+            parameters=list(six.iteritems(params)),
             timeout_in_minutes=timeout_mins,
             disable_rollback=not rollback_on_error,
             tags=tags,
@@ -147,9 +173,8 @@ class CloudFormation(object):
             template_body (unicode):
                 The template to use for the stack.
 
-            params (list of tuple):
-                The parameters to pass to the stack, in the form of a list
-                of tuple of key/value pairs.
+            params (dict):
+                The parameters to pass to the stack.
 
             rollback_on_error (bool, optional):
                 Whether to roll back the stack changes if there's an error.
@@ -175,7 +200,7 @@ class CloudFormation(object):
             stack_id = self.cnx.update_stack(
                 stack_name,
                 template_body=template_body,
-                parameters=params,
+                parameters=list(six.iteritems(params)),
                 timeout_in_minutes=timeout_mins,
                 disable_rollback=not rollback_on_error,
                 tags=tags,
@@ -206,6 +231,24 @@ class CloudFormation(object):
     def delete_stack(self, stack_id):
         """Delete an existing stack."""
         self.cnx.delete_stack(stack_id)
+
+    def _get_stack_has_tags(self, stack, tags):
+        """Return whether a stack has all specified tags.
+
+        Args:
+            tags (dict):
+                A dictionary of required tags.
+
+        Returns:
+            bool:
+            ``True`` if the stack has all the required tags, or ``False``
+            otherwise.
+        """
+        for tag_name, tag_value in six.iteritems(tags):
+            if not stack.tags.get(tag_name) == tag_value:
+                return False
+
+        return True
 
     def _wait_for_stack(self, stack_name, last_event_id=None):
         """Wait for a create/update stack operation to complete.

@@ -20,7 +20,9 @@ class TemplateCompilerTests(TestCase):
             '    Description: My description.\n'
             '    Version: 1.0\n'
             'Parameters:\n'
-            '    key: value\n'
+            '    key:\n'
+            '        Type: String\n'
+            '        Description: Test\n'
             'Mappings:\n'
             '    key: value\n'
             'Conditions:\n'
@@ -34,7 +36,14 @@ class TemplateCompilerTests(TestCase):
         doc = compiler.doc
         self.assertEqual(doc['AWSTemplateFormatVersion'], '2010-09-09')
         self.assertEqual(doc['Description'], 'My description. [v1.0]')
-        self.assertEqual(doc['Parameters'], {'key': 'value'})
+        self.assertEqual(
+            doc['Parameters'],
+            {
+                'key': {
+                    'Type': 'String',
+                    'Description': 'Test',
+                }
+            })
         self.assertEqual(doc['Mappings'], {'key': 'value'})
         self.assertEqual(doc['Conditions'], {'key': 'value'})
         self.assertEqual(doc['Resources'], {'key': 'value'})
@@ -126,6 +135,44 @@ class TemplateCompilerTests(TestCase):
                         }
                     ],
                 },
+            })
+
+    def test_compiling_with_lookup_from_stack_params(self):
+        """Testing TemplateCompiler compiles with LookupFromStack parameters"""
+        compiler = TemplateCompiler()
+        compiler.load_string(
+            'Meta:\n'
+            '    Description: My description.\n'
+            '    Version: 1.0\n'
+            'Parameters:\n'
+            '    key:\n'
+            '        Type: String\n'
+            '        Description: Test\n'
+            '        LookupFromStack:\n'
+            '            StackName: my-stack\n'
+            '            OutputName: SomeOutput\n'
+            '            MatchStackTags:\n'
+            '                - Environment\n')
+
+        doc = compiler.doc
+        self.assertEqual(
+            doc['Parameters'],
+            {
+                'key': {
+                    'Type': 'String',
+                    'Description': 'Test',
+                },
+            })
+        self.assertEqual(
+            compiler.stack_param_lookups,
+            {
+                'key': {
+                    'StackName': 'my-stack',
+                    'OutputName': 'SomeOutput',
+                    'MatchStackTags': [
+                        'Environment',
+                    ],
+                }
             })
 
     def test_get_tags(self):

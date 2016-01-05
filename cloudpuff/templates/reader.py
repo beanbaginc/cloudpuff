@@ -1,5 +1,6 @@
 from __future__ import unicode_literals
 
+import os
 import random
 import sys
 from collections import OrderedDict
@@ -163,11 +164,32 @@ class TemplateLoader(yaml.Loader):
         variables found will be copied to this template.
         """
         filenames = self.construct_scalar(node).split()
-        self.template_state.imported_files.update(filenames)
 
         for filename in filenames:
+            # If the path is not absolute (which it's unlikely to be), treat
+            # it as a path relative to the directory in which this template
+            # resides.
+            if self.template_state.base_dir and not os.path.isabs(filename):
+                filename = os.path.join(self.template_state.base_dir,
+                                        filename)
+
+            # If the path is a directory, look for a __main__.yaml inside of
+            # it.
+            if os.path.isdir(filename):
+                filename = os.path.join(filename, '__main__.yaml')
+
+            # Simplify the path, in case it's a relative path.
+            filename = os.path.normpath(filename)
+
+            self.template_state.imported_files.add(filename)
+
             reader = TemplateReader()
-            reader.load_file(filename)
+
+            try:
+                reader.load_file(filename)
+            except IOError as e:
+                raise ConstructorError('Unable to import file "%s": %s'
+                                       % (filename, e))
 
             self.template_state.update(reader.template_state)
 
@@ -317,10 +339,21 @@ class TemplateReader(object):
     def __init__(self):
         self.doc = OrderedDict()
         self.template_state = TemplateState()
+        self.base_dir = None
 
-    def load_string(self, s):
-        """Load a template file from a string."""
+    def load_string(self, s, base_dir=None):
+        """Load a template file from a string.
+
+        Args:
+            s (unicode):
+                The template string to load.
+
+            base_dir (unicode, optional):
+                The base directory for this template. Imports will be made
+                relative to this directory.
+        """
         reader = self
+        self.template_state.base_dir = base_dir
 
         class ReaderTemplateLoader(TemplateLoader):
             """A TemplateLoader that interfaces with this TemplateReader.
@@ -347,7 +380,7 @@ class TemplateReader(object):
     def load_file(self, filename):
         """Load a template file from disk."""
         with open(filename, 'r') as fp:
-            self.load_string(fp.read())
+            self.load_string(fp.read(), base_dir=os.path.dirname(filename))
 
     def _resolve_variables(self, reader, doc):
         prev_unresolved_vars = None

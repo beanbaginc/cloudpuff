@@ -1253,3 +1253,108 @@ class TemplateReaderTests(TestCase):
                 })
         finally:
             shutil.rmtree(tempdir)
+
+    def test_statement_import_with_dir(self):
+        """Testing TemplateReader with !import with directory"""
+        tempdir = tempfile.mkdtemp(prefix='cloudpuff-tests')
+        defs_dir = os.path.join(tempdir, 'defs')
+        filename = os.path.join(defs_dir, '__main__.yaml')
+
+        os.mkdir(defs_dir, 0700)
+
+        with open(filename, 'w') as fp:
+            fp.write('--- !vars\n'
+                     'var1: value1\n'
+                     '--- !macros\n'
+                     'macro1:\n'
+                     '    content:\n'
+                     '        key1: $$var1\n')
+
+        try:
+            reader = TemplateReader()
+            reader.load_string(
+                '__imports__:\n'
+                '    !import %s\n'
+                '\n'
+                'key: !call-macro\n'
+                '    macro: macro1\n'
+                % defs_dir)
+
+            self.assertEqual(
+                reader.template_state.variables,
+                {
+                    'var1': 'value1'
+                })
+            self.assertEqual(
+                reader.template_state.macros,
+                {
+                    'macro1': {
+                        'content': {
+                            'key1': 'value1',
+                        }
+                    }
+                })
+            self.assertEqual(
+                reader.doc['key'],
+                {
+                    'key1': 'value1',
+                })
+        finally:
+            shutil.rmtree(tempdir)
+
+    def test_statement_import_with_relative(self):
+        """Testing TemplateReader with !import with relative path"""
+        tempdir = tempfile.mkdtemp(prefix='cloudpuff-tests')
+        defs_dir = os.path.join(tempdir, 'defs')
+        test_dir = os.path.join(defs_dir, 'test')
+
+        os.mkdir(defs_dir, 0700)
+        os.mkdir(test_dir, 0700)
+
+        filename = os.path.join(defs_dir, '__main__.yaml')
+
+        with open(filename, 'w') as fp:
+            fp.write('__import__:\n'
+                     '    !import test\n')
+
+        filename = os.path.join(test_dir, '__main__.yaml')
+
+        with open(filename, 'w') as fp:
+            fp.write('--- !vars\n'
+                     'var1: value1\n'
+                     '--- !macros\n'
+                     'macro1:\n'
+                     '    content:\n'
+                     '        key1: $$var1\n')
+
+        try:
+            reader = TemplateReader()
+            reader.load_string(
+                '__imports__:\n'
+                '    !import %s\n'
+                '\n'
+                'key: !call-macro\n'
+                '    macro: macro1\n'
+                % defs_dir)
+
+            self.assertEqual(
+                reader.template_state.variables,
+                {
+                    'var1': 'value1'
+                })
+            self.assertEqual(
+                reader.template_state.macros,
+                {
+                    'macro1': {
+                        'content': {
+                            'key1': 'value1',
+                        }
+                    }
+                })
+            self.assertEqual(
+                reader.doc['key'],
+                {
+                    'key1': 'value1',
+                })
+        finally:
+            shutil.rmtree(tempdir)

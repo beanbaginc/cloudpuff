@@ -19,26 +19,6 @@ from cloudpuff.utils.console import prompt_template_param
 class LaunchStack(BaseCommand):
     """LaunchStackes a CloudFormation stack."""
 
-    EVENT_ACTION_LABELS = {
-        'CREATE_COMPLETE': 'Created',
-        'CREATE_FAILED': 'Failed to create',
-        'CREATE_IN_PROGRESS': 'Creating',
-        'DELETE_COMPLETE': 'Deleted',
-        'DELETE_FAILED': 'Failed to delete',
-        'DELETE_IN_PROGRESS': 'Deleting',
-        'ROLLBACK_COMPLETE': 'Rolled back',
-        'ROLLBACK_FAILED': 'Failed to roll back',
-        'ROLLBACK_IN_PROGRESS': 'Rolling back',
-        'UPDATE_COMPLETE': 'Updated',
-        'UPDATE_COMPLETE_CLEANUP_IN_PROGRESS': 'Updated and cleaning up',
-        'UPDATE_IN_PROGRESS': 'Updating',
-        'UPDATE_ROLLBACK_COMPLETE': 'Rolled back update for',
-        'UPDATE_ROLLBACK_COMPLETE_CLEANUP_IN_PROGRESS':
-            'Rolled back and cleaning up',
-        'UPDATE_ROLLBACK_FAILED': 'Failed to roll back update for',
-        'UPDATE_ROLLBACK_IN_PROGRESS': 'Rolling back update for',
-    }
-
     def add_options(self, parser):
         parser.add_argument(
             '--region',
@@ -148,7 +128,7 @@ class LaunchStack(BaseCommand):
             print('Please wait. This may take several minutes...')
 
             try:
-                self._print_events(self.cf.update_stack_and_wait(
+                self.print_stack_events(self.cf.update_stack_and_wait(
                     stack_name=stack_name,
                     template_body=template_body,
                     params=params,
@@ -182,7 +162,7 @@ class LaunchStack(BaseCommand):
             print('Please wait. This may take several minutes...')
 
             try:
-                self._print_events(self.cf.create_stack_and_wait(
+                self.print_stack_events(self.cf.create_stack_and_wait(
                     stack_name=stack_name,
                     template_body=template_body,
                     params=params,
@@ -325,53 +305,6 @@ class LaunchStack(BaseCommand):
                 sys.exit(1)
 
         return params
-
-    def _print_events(self, events):
-        """Print stack events to the console as they come in.
-
-        This will take a generator of stack events and print them out as
-        they come in. Each event will continue an icon representing the event
-        ("X" for error, checkmark for success, ">" for progress), along
-        with information on the event.
-
-        Args:
-            events (generator):
-                A generator of events.
-        """
-        for event in events:
-            event_status = event.resource_status
-
-            if event_status.endswith('FAILED'):
-                icon = self.ICON_ERROR
-                status_color = Fore.RED
-            elif event_status.endswith('COMPLETE'):
-                icon = self.ICON_SUCCESS
-                status_color = Fore.GREEN
-            elif event_status.endswith('IN_PROGRESS'):
-                icon = self.ICON_PROGRESS
-                status_color = Fore.YELLOW
-            else:
-                # This shouldn't happen, as it's not a valid state.
-                icon = '?'
-                status_color = ''
-
-            # Override the color for rollbacks.
-            if 'ROLLBACK_IN_PROGRESS' in event_status:
-                status_color = Fore.RED
-
-            action = self.EVENT_ACTION_LABELS.get(event_status, event_status)
-
-            print('%s%s%s %s %s (%s)'
-                   % (status_color, icon, Style.RESET_ALL, action,
-                      event.logical_resource_id, event.resource_type))
-
-            if event.resource_status_reason:
-                print('%s%s%s'
-                      % (status_color,
-                         textwrap.fill(event.resource_status_reason,
-                                       initial_indent='  ',
-                                       subsequent_indent='  '),
-                         Style.RESET_ALL))
 
 
 def main():

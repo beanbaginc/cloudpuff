@@ -46,7 +46,7 @@ class TemplateCompiler(object):
         self.doc['AWSTemplateFormatVersion'] = '2010-09-09'
 
         self.meta = reader.doc['Meta']
-        name = self.meta.get('Name', name)
+        name = self.meta.setdefault('Name', name)
 
         if 'Description' in self.meta:
             description = self.meta['Description']

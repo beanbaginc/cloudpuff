@@ -93,24 +93,28 @@ class CreateAMI(BaseCommand):
         cf = CloudFormation(self.options.region)
 
         result = cf.validate_template(template_body)
-        params = self._get_template_params(result.template_parameters)
+        params = dict(self._get_template_params(result.template_parameters))
 
         print()
         print('Creating the CloudFormation stack.')
         print('Please wait. This may take several minutes...')
 
+        stack_name = self._generate_stack_name()
+
         try:
-            stack = cf.create_stack_and_wait(
-                stack_name=self._generate_stack_name(),
+            self.print_stack_events(cf.create_stack_and_wait(
+                stack_name=stack_name,
                 template_body=template_body,
                 params=params,
                 rollback_on_error=self.options.rollback,
                 tags={
                     'cloudpuff_ami_creation': '1',
-                })
+                }))
         except StackCreationError as e:
             sys.stderr.write('Error creating the stack: %s\n' % e)
             sys.exit(1)
+
+        stack = cf.lookup_stack(stack_name)
 
         id_map = self._create_amis(stack, compiler.ami_outputs, compiler.doc)
         cf.delete_stack(stack.stack_id)

@@ -140,7 +140,7 @@ class CloudFormation(object):
             timeout_in_minutes=timeout_mins,
             disable_rollback=not rollback_on_error,
             tags=tags,
-            capabilities=['CAPABILITY_IAM'])
+            capabilities=['CAPABILITY_IAM', 'CAPABILITY_NAMED_IAM'])
 
         stack = None
         stack_status = None

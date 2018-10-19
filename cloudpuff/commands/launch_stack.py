@@ -165,7 +165,8 @@ class LaunchStack(BaseCommand):
                           self._generate_stack_name(generic_stack_name))
             params = self._get_template_params(
                 template_params,
-                ignore_params=list(compiler.stack_param_lookups.keys()))
+                ignore_params=list(compiler.stack_param_lookups.keys()),
+                required_params=compiler.required_params)
             params = self._lookup_stack_params(params, compiler)
 
             print('Creating the CloudFormation stack.')
@@ -207,7 +208,8 @@ class LaunchStack(BaseCommand):
         return '%s-%s' % (base_stack_name,
                           datetime.now().strftime('%Y%m%d%H%M%S'))
 
-    def _get_template_params(self, template_parameters, ignore_params=[]):
+    def _get_template_params(self, template_parameters, ignore_params=[],
+                             required_params=None):
         """Return values for all needed template parameters.
 
         Any parameters needed by the template that weren't provided on the
@@ -224,6 +226,11 @@ class LaunchStack(BaseCommand):
             ignore_params (list, optional):
                 A list of parameter names to ignore.
 
+            required_params (dict):
+                A dictionary of parameter requirements. Each key is a
+                parameter name and each value is a boolean indicating if it's
+                required.
+
         Returns:
             dict:
             The resulting parameters.
@@ -237,7 +244,9 @@ class LaunchStack(BaseCommand):
             param_name = template_param.parameter_key
 
             if param_name not in params and param_name not in ignore_params:
-                params[param_name] = prompt_template_param(template_param)
+                params[param_name] = prompt_template_param(
+                    template_param,
+                    required=required_params[param_name])
 
         return params
 

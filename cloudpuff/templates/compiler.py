@@ -25,6 +25,7 @@ class TemplateCompiler(object):
         self.for_amis = for_amis
         self.ami_outputs = []
         self.stack_param_lookups = {}
+        self.required_params = {}
 
     def load_string(self, s, stack_name=None, filename=None):
         """Load a CloudPuff template from a string.
@@ -85,7 +86,7 @@ class TemplateCompiler(object):
             self.doc['Conditions'].update(template_state.if_conditions)
 
         # Look for any parameters that reference outputs from other stacks.
-        self._scan_referenced_stack_params()
+        self._post_process_params()
 
         # Look for any metadata specific to CloudPuff that we want to
         # process.
@@ -151,7 +152,7 @@ class TemplateCompiler(object):
 
         return tags
 
-    def _scan_referenced_stack_params(self):
+    def _post_process_params(self):
         """Scan the list of parameters for those referencing external stacks.
 
         Any parameter containing a ``LookupFromStack`` will be specially
@@ -165,6 +166,9 @@ class TemplateCompiler(object):
 
             if lookup_from_stack:
                 self.stack_param_lookups[param_name] = lookup_from_stack
+
+            self.required_params[param_name] = \
+                param.pop('Required', 'true').lower() == 'true'
 
     def _scan_cloudpuff_metadata(self):
         ami_metadata = []

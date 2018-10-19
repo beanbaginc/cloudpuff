@@ -3,13 +3,25 @@ from __future__ import print_function, unicode_literals
 from six.moves import input
 
 
-def prompt_template_param(template_param):
+def prompt_template_param(template_param, required=True):
     """Prompt the user for a template parameter.
 
     The template parameter name, description, and any default will be
     shown to the user.
 
     The resulting value will be returned.
+
+    Args:
+        template_param (boto.cloudformation.template.TemplateParameter):
+            The template parameter to prompt for.
+
+        required (bool, optional):
+            Whether this parameter is required.
+
+    Returns:
+        unicode:
+        The value chosen for the parameter, or the default value if not
+        specified.
     """
     key = template_param.parameter_key
     default_value = template_param.default_value
@@ -34,7 +46,7 @@ def prompt_template_param(template_param):
         if not value and default_value:
             value = default_value
 
-        if value:
+        if value or not required:
             break
 
     return value

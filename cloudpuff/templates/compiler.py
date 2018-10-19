@@ -40,6 +40,12 @@ class TemplateCompiler(object):
                 section (which always overrides this value).
         """
         reader = TemplateReader()
+
+        if self.for_amis:
+            reader.template_state.variables['buildingAMIs'] = 'true'
+        else:
+            reader.template_state.variables['buildingAMIs'] = 'false'
+
         reader.load_string(s)
 
         self.doc = OrderedDict()

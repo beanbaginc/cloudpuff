@@ -69,7 +69,7 @@ class LaunchStack(BaseCommand):
             sys.stderr.write('The --update option requires --stack-name.\n')
             sys.exit(1)
 
-        compiler = TemplateCompiler(for_amis=True)
+        compiler = TemplateCompiler()
         compiler.load_file(template_file)
         template_body = compiler.to_json()
 

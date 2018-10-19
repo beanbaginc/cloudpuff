@@ -1,7 +1,10 @@
 from __future__ import print_function, unicode_literals
 
+import sys
+
 from cloudpuff.commands import BaseCommand, run_command
 from cloudpuff.templates import TemplateReader
+from cloudpuff.templates.errors import TemplateError, TemplateSyntaxError
 
 
 class MakeDepends(BaseCommand):
@@ -18,7 +21,15 @@ class MakeDepends(BaseCommand):
         filename = self.options.filename
 
         reader = TemplateReader()
-        reader.load_file(filename)
+
+        try:
+            reader.load_file(filename)
+        except TemplateSyntaxError as e:
+            sys.stderr.write('Template syntax error: %s\n' % e)
+            sys.exit(1)
+        except TemplateError as e:
+            sys.stderr.write('Template error: %s\n' % e)
+            sys.exit(1)
 
         deps = [filename]
         deps += reader.template_state.imported_files

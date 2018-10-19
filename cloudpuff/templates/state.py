@@ -21,6 +21,7 @@ class TemplateState(object):
         self.embedded_files = set()
         self.if_conditions = OrderedDict()
         self.base_dir = None
+        self.filename = None
 
     def update(self, other_state):
         self.macros.update(other_state.macros)

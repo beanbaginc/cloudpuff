@@ -5,6 +5,7 @@ import sys
 
 from cloudpuff.commands import BaseCommand, run_command
 from cloudpuff.templates import TemplateCompiler
+from cloudpuff.templates.errors import TemplateError, TemplateSyntaxError
 
 
 class CompileTemplate(BaseCommand):
@@ -20,7 +21,16 @@ class CompileTemplate(BaseCommand):
 
     def main(self):
         compiler = TemplateCompiler()
-        compiler.load_file(self.options.filename)
+
+        try:
+            compiler.load_file(self.options.filename)
+        except TemplateSyntaxError as e:
+            sys.stderr.write('Template syntax error: %s\n' % e)
+            sys.exit(1)
+        except TemplateError as e:
+            sys.stderr.write('Template error: %s\n' % e)
+            sys.exit(1)
+
         dumped = compiler.to_json()
 
         if self.options.dest_filename:

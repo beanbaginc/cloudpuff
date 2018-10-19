@@ -13,6 +13,7 @@ from cloudpuff.commands import BaseCommand, run_command
 from cloudpuff.errors import (StackCreationError, StackUpdateError,
                               StackUpdateNotRequired)
 from cloudpuff.templates import TemplateCompiler
+from cloudpuff.templates.errors import TemplateError, TemplateSyntaxError
 from cloudpuff.utils.console import prompt_template_param
 
 
@@ -70,7 +71,16 @@ class LaunchStack(BaseCommand):
             sys.exit(1)
 
         compiler = TemplateCompiler()
-        compiler.load_file(template_file)
+
+        try:
+            compiler.load_file(template_file)
+        except TemplateSyntaxError as e:
+            sys.stderr.write('Template syntax error: %s\n' % e)
+            sys.exit(1)
+        except TemplateError as e:
+            sys.stderr.write('Template error: %s\n' % e)
+            sys.exit(1)
+
         template_body = compiler.to_json()
 
         generic_stack_name = compiler.meta['Name']

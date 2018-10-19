@@ -8,6 +8,7 @@ from collections import OrderedDict
 import yaml
 from yaml.constructor import ConstructorError
 
+from cloudpuff.templates.errors import TemplateSyntaxError
 from cloudpuff.templates.state import TemplateState, VarReference
 from cloudpuff.templates.string_parser import StringParser
 
@@ -339,9 +340,8 @@ class TemplateReader(object):
     def __init__(self):
         self.doc = OrderedDict()
         self.template_state = TemplateState()
-        self.base_dir = None
 
-    def load_string(self, s, base_dir=None):
+    def load_string(self, s, base_dir=None, filename=None):
         """Load a template file from a string.
 
         Args:
@@ -351,9 +351,22 @@ class TemplateReader(object):
             base_dir (unicode, optional):
                 The base directory for this template. Imports will be made
                 relative to this directory.
+
+            filename (unicode, optional):
+                The name of the file being loaded. This is used to generate
+                more useful errors.
+
+        Raises:
+            cloudpuff.templates.errors.TemplateSyntaxError:
+                A syntax error was found in the template.
         """
         reader = self
-        self.template_state.base_dir = base_dir
+
+        if filename:
+            self.template_state.filename = filename
+
+        if base_dir:
+            self.template_state.base_dir = base_dir
 
         class ReaderTemplateLoader(TemplateLoader):
             """A TemplateLoader that interfaces with this TemplateReader.
@@ -365,22 +378,35 @@ class TemplateReader(object):
             def __init__(self, *args, **kwargs):
                 super(ReaderTemplateLoader, self).__init__(*args, **kwargs)
 
+                # Show a more useful filename for errors.
+                self.name = filename
+
                 # Share the state across all instances within this reader.
                 self.template_state = reader.template_state
 
-        for doc in yaml.load_all(s, Loader=ReaderTemplateLoader):
-            if isinstance(doc, MacrosDoc):
-                self.template_state.macros.update(doc.__dict__)
-            elif isinstance(doc, VariablesDoc):
-                doc_tree = self._resolve_variables(reader, doc)
-                self.template_state.variables.update(doc_tree)
-            else:
-                self.doc.update(doc)
+        try:
+            for doc in yaml.load_all(s, Loader=ReaderTemplateLoader):
+                if isinstance(doc, MacrosDoc):
+                    self.template_state.macros.update(doc.__dict__)
+                elif isinstance(doc, VariablesDoc):
+                    doc_tree = self._resolve_variables(reader, doc)
+                    self.template_state.variables.update(doc_tree)
+                else:
+                    self.doc.update(doc)
+        except (yaml.parser.ParserError, yaml.scanner.ScannerError) as e:
+            mark = e.problem_mark
+            raise TemplateSyntaxError(e.problem,
+                                      filename=filename,
+                                      code=mark.get_snippet(),
+                                      line=mark.line + 1,
+                                      column=mark.column + 1)
 
     def load_file(self, filename):
         """Load a template file from disk."""
         with open(filename, 'r') as fp:
-            self.load_string(fp.read(), base_dir=os.path.dirname(filename))
+            self.load_string(fp.read(),
+                             base_dir=os.path.dirname(filename),
+                             filename=filename)
 
     def _resolve_variables(self, reader, doc):
         prev_unresolved_vars = None

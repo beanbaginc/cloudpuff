@@ -26,18 +26,22 @@ class TemplateCompiler(object):
         self.ami_outputs = []
         self.stack_param_lookups = {}
 
-    def load_string(self, s, name=None):
+    def load_string(self, s, stack_name=None, filename=None):
         """Load a CloudPuff template from a string.
 
         Args:
             s (unicode):
                 The template string to load.
 
-            name (unicode, optional):
+            stack_name (unicode, optional):
                 The optional generic name of the stack.
 
                 If not provided, a "Name" must be specified in the "Meta"
                 section (which always overrides this value).
+
+            filename (unicode, optional):
+                The name of the file being loaded. This is used to generate
+                more useful errors.
         """
         reader = TemplateReader()
 
@@ -46,13 +50,13 @@ class TemplateCompiler(object):
         else:
             reader.template_state.variables['buildingAMIs'] = 'false'
 
-        reader.load_string(s)
+        reader.load_string(s, filename=filename)
 
         self.doc = OrderedDict()
         self.doc['AWSTemplateFormatVersion'] = '2010-09-09'
 
         self.meta = reader.doc['Meta']
-        name = self.meta.setdefault('Name', name)
+        self.meta.setdefault('Name', stack_name)
 
         if 'Description' in self.meta:
             description = self.meta['Description']
@@ -100,7 +104,9 @@ class TemplateCompiler(object):
         generic_stack_name = generic_stack_name.replace('.', '-')
 
         with open(filename, 'r') as fp:
-            self.load_string(fp.read(), name=generic_stack_name)
+            self.load_string(fp.read(),
+                             stack_name=generic_stack_name,
+                             filename=filename)
 
     def to_json(self):
         """Return a JSON string version of the compiled template."""

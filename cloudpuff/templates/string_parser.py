@@ -538,6 +538,9 @@ class StringParser(object):
         If the string starts with "__base64__", the result will be wrapped
         in a Fn::Base64.
         """
+        if not s:
+            return ''
+
         lines = s.splitlines(True)
 
         if lines[0].strip() == '__base64__':

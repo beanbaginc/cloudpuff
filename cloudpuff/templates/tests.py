@@ -993,6 +993,14 @@ class TemplateReaderTests(TestCase):
                 ]
             })
 
+    def test_process_empty_strings(self):
+        """Testing TemplateReader with processing empty strings"""
+        reader = TemplateReader()
+        reader.load_string(
+            'key: |\n')
+
+        self.assertEqual(reader.doc['key'], '')
+
     def test_process_multiline_strings(self):
         """Testing TemplateReader with processing multi-line strings"""
         reader = TemplateReader()

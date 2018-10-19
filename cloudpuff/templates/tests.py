@@ -870,6 +870,28 @@ class TemplateReaderTests(TestCase):
                 ]
             })
 
+    def test_embed_funcs_with_import_value(self):
+        """Testing TemplateReader with embedding ImportValue()"""
+        reader = TemplateReader()
+        reader.load_string(
+            'key: <% ImportValue("@@{SomeStackName}-Value") %>')
+
+        self.assertEqual(
+            reader.doc['key'],
+            {
+                'Fn::ImportValue': {
+                    'Fn::Join': [
+                        '',
+                        [
+                            {
+                                'Ref': 'SomeStackName',
+                            },
+                            '-Value',
+                        ],
+                    ],
+                },
+            })
+
     def test_embed_vars_in_keys(self):
         """Testing TemplateReader with embedding $$variables in keys"""
         reader = TemplateReader()

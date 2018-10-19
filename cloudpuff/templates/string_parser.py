@@ -485,6 +485,21 @@ class SelectFunction(Function):
         }
 
 
+class ImportValueFunction(Function):
+    """A wrapper around Fn::ImportValue."""
+
+    def serialize(self):
+        """Serialize the ImportValue call to a function.
+
+        Returns:
+            dict:
+            The CloudFormation representation of this function.
+        """
+        return {
+            'Fn::ImportValue': self.normalize_content(self.params),
+        }
+
+
 class StringParser(object):
     """Parses a string for functions, variables, and references."""
 
@@ -502,6 +517,7 @@ class StringParser(object):
         'Else': ElseBlockFunction,
         'GetAZs': GetAZsFunction,
         'Select': SelectFunction,
+        'ImportValue': ImportValueFunction,
     }
 
     def __init__(self, template_state):

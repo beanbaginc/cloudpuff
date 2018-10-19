@@ -711,6 +711,29 @@ class TemplateReaderTests(TestCase):
                 ]
             })
 
+    def test_embed_funcs_with_if_empty_string(self):
+        """Testing TemplateReader with embedding <% If (lhs == "") %>"""
+        reader = TemplateReader()
+        reader.load_string(
+            'key: |\n'
+            '    <% If (a == "") { %>\n'
+            '    the line.\n'
+            '    <% } %>')
+
+        self.assertEqual(
+            reader.doc['key'],
+            {
+                'Fn::If': [
+                    IfCondition({
+                        'Fn::Equals': ['a', ''],
+                    }),
+                    'the line.\n',
+                    {
+                        'Ref': 'AWS::NoValue',
+                    }
+                ]
+            })
+
     def test_embed_funcs_with_get_att(self):
         """Testing TemplateReader with embedding GetAtt"""
         reader = TemplateReader()

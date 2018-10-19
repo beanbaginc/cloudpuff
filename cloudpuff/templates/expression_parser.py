@@ -97,7 +97,10 @@ class ExpressionParser(object):
                     (s.startswith("'") and s.endswith("'"))):
                     s = s[1:-1]
 
-                yield Token('VALUE', self.process_value_func(s))
+                if s:
+                    s = self.process_value_func(s)
+
+                yield Token('VALUE', s)
 
     def _compute_expression(self, min_precedence=1):
         """Compute a sub-expression from the tokens.

@@ -24,7 +24,7 @@ setup(
     entry_points={
         'console_scripts': [
             '%s = cloudpuff.commands.%s:main' % (name, mod)
-            for name, mod in commands.iteritems()
+            for name, mod in commands.items()
         ],
     },
     install_requires=[

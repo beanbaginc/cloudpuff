@@ -3,23 +3,30 @@
 from __future__ import annotations
 
 import json
-import os
-import sys
-from datetime import datetime
+from typing import Optional, Sequence, TYPE_CHECKING
 
 from colorama import Fore, Style
 
 from cloudpuff.cloudformation import CloudFormation
 from cloudpuff.commands import BaseCommand, run_command
-from cloudpuff.errors import StackCreationError
-from cloudpuff.templates import TemplateCompiler
-from cloudpuff.utils.console import prompt_template_param
+
+if TYPE_CHECKING:
+    import argparse
 
 
 class ListStacks(BaseCommand):
     """Lists all stacks and their outputs in CloudFormation."""
 
-    def add_options(self, parser):
+    def add_options(
+        self,
+        parser: argparse.ArgumentParser,
+    ) -> None:
+        """Add options for the command.
+
+        Args:
+            parser (argparse.ArgumentParser):
+                The argument parser to add options to.
+        """
         parser.add_argument(
             '--region',
             default='us-east-1',
@@ -35,8 +42,9 @@ class ListStacks(BaseCommand):
             nargs='*',
             help='Limit results to the given stack name(s).')
 
-    def main(self):
-        cf = CloudFormation(self.options.region)
+    def main(self) -> None:
+        """Main entry point for the command."""
+        cf = CloudFormation(region=self.options.region)
 
         stacks = cf.lookup_stacks()
 
@@ -54,7 +62,10 @@ class ListStacks(BaseCommand):
         else:
             self._print_stacks(stacks)
 
-    def _print_stacks_json(self, stacks):
+    def _print_stacks_json(
+        self,
+        stacks: Sequence[boto.cloudformation.stack.Stack],
+    ) -> None:
         """Print the list of stacks as pretty-printed JSON.
 
         Args:
@@ -79,14 +90,17 @@ class ListStacks(BaseCommand):
             ],
             indent=2))
 
-    def _print_stacks(self, stacks):
+    def _print_stacks(
+        self,
+        stacks: Sequence[boto.cloudformation.stack.Stack],
+    ) -> None:
         """Print the list of stacks as formatted console output.
 
         Args:
             stacks (list of boto.cloudformation.stack.Stack):
                 List of stacks to print.
         """
-        first = True
+        first: bool = True
 
         for stack in stacks:
             if first:
@@ -95,12 +109,16 @@ class ListStacks(BaseCommand):
                 print()
                 print()
 
-            if stack.stack_status.endswith('FAILED'):
+            stack_status = stack.stack_status
+
+            if stack_status.endswith('FAILED'):
                 status_color = Fore.RED
-            elif stack.stack_status.endswith('COMPLETE'):
+            elif stack_status.endswith('COMPLETE'):
                 status_color = Fore.GREEN
-            elif stack.stack_status.endswith('PROGRESS'):
+            elif stack_status.endswith('PROGRESS'):
                 status_color = Fore.YELLOW
+            else:
+                status_color = None
 
             self._print_field(stack.stack_name, key_color=Fore.CYAN)
             self._print_field('Status', stack.stack_status, indent_level=1,
@@ -121,27 +139,34 @@ class ListStacks(BaseCommand):
                 for tag_name, tag_value in stack.tags.items():
                     self._print_field(tag_name, tag_value, indent_level=2)
 
-    def _print_field(self, key, value='', indent_level=0, key_color=None,
-                     value_color=None):
+    def _print_field(
+        self,
+        key: str,
+        value: object = '',
+        *,
+        indent_level: int = 0,
+        key_color: Optional[str] = None,
+        value_color: Optional[str] = None,
+    ) -> None:
         """Print a key/value field to the console.
 
         The keys will be printed as bold. This has several additional options
         for controlling presentation.
 
         Args:
-            key (unicode):
+            key (str):
                 The key to print.
 
-            value (unicode, optional):
+            value (str, optional):
                 The value to print.
 
             indent_level (int, optional):
                 The indentation level. Each level adds 4 spaces before the key.
 
-            key_color (unicode, optional):
+            key_color (str, optional):
                 The color code to use for the key.
 
-            value_color (unicode, optional):
+            value_color (str, optional):
                 The color code to use for the value.
         """
         if key_color:

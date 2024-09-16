@@ -1,15 +1,21 @@
-from __future__ import unicode_literals
+"""CloudFormation operations."""
 
+from __future__ import annotations
+
+import os
 import time
+from typing import Iterable, Iterator, Optional, Sequence, TYPE_CHECKING
 
 import boto.cloudformation
 from boto.exception import BotoServerError
 
-from cloudpuff.errors import (StackCreationError, StackLookupError,
-                                StackUpdateError, StackUpdateNotRequired)
+from cloudpuff.errors import (StackCreationError,
+                              StackLookupError,
+                              StackUpdateError,
+                              StackUpdateNotRequired)
 
 
-class CloudFormation(object):
+class CloudFormation:
     """Manages operations on CloudFormation.
 
     This is a wrapper around boto's CloudFormation API that simplifies
@@ -18,10 +24,25 @@ class CloudFormation(object):
 
     DEFAULT_TIMEOUT_MINS = 30
 
-    def __init__(self, region):
+    def __init__(
+        self,
+        *,
+        region: str,
+    ) -> None:
+        """Initialize the CloudFormation interface.
+
+        Args:
+            region (str):
+                The AWS region to connect to.
+        """
         self.cnx = boto.cloudformation.connect_to_region(region)
 
-    def lookup_stacks(self, statuses=None, tags={}):
+    def lookup_stacks(
+        self,
+        *,
+        statuses: Sequence[str] = [],
+        tags: dict[str, str] = {},
+    ) -> Sequence[boto.cloudformation.stack.Stack]:
         """Return stacks known to CloudFormation.
 
         This can be filtered down by providing one or more valid status strings
@@ -56,11 +77,14 @@ class CloudFormation(object):
 
         return list(stacks)
 
-    def lookup_stack(self, stack_name):
+    def lookup_stack(
+        self,
+        stack_name: str,
+    ) -> boto.cloudformation.stack.Stack:
         """Return the stack with the given name.
 
         Args:
-            stack_name (unicode):
+            stack_name (str):
                 The name of the stack to look up.
 
         Returns:
@@ -78,11 +102,14 @@ class CloudFormation(object):
 
         return stacks[0]
 
-    def lookup_stack_events(self, stack_name):
+    def lookup_stack_events(
+        self,
+        stack_name: str,
+    ) -> Sequence[boto.cloudformation.stack.StackEvent]:
         """Look up all events for a stack.
 
         Args:
-            stack_name (unicode):
+            stack_name (str):
                 The name of the stack to look up events for.
 
         Returns:
@@ -91,23 +118,41 @@ class CloudFormation(object):
         """
         return self.cnx.describe_stack_events(stack_name)
 
-    def validate_template(self, template_body):
-        """Validate the given template string."""
+    def validate_template(
+        self,
+        template_body: str,
+    ) -> object:
+        """Validate the given template string.
+
+        Args:
+            template_body (str):
+                The template body to validate.
+
+        Returns:
+            object:
+            The validation result.
+        """
         return self.cnx.validate_template(template_body)
 
-    def create_stack_and_wait(self, stack_name, template_body, params,
-                              rollback_on_error=True,
-                              tags={}, timeout_mins=DEFAULT_TIMEOUT_MINS):
+    def create_stack_and_wait(
+        self,
+        stack_name: str,
+        template_body: str,
+        params: dict[str, str],
+        rollback_on_error: bool = True,
+        tags: dict[str, str] = {},
+        timeout_mins: int = DEFAULT_TIMEOUT_MINS,
+    ) -> Iterator[boto.cloudformation.stack.StackEvent]:
         """Create a stack and wait for it to complete.
 
         As changes are made to the stack, events will be yielded to the caller,
         until the update either finishes or fails.
 
         Args:
-            stack_name (unicode):
+            stack_name (str):
                 The name of the new stack.
 
-            template_body (unicode):
+            template_body (str):
                 The template to use for the stack.
 
             params (dict):
@@ -157,19 +202,26 @@ class CloudFormation(object):
                 'Stack creation failed. Got status: "%s"'
                 % stack_status)
 
-    def update_stack_and_wait(self, stack_name, template_body, params,
-                              rollback_on_error=True,
-                              tags={}, timeout_mins=DEFAULT_TIMEOUT_MINS):
+    def update_stack_and_wait(
+        self,
+        *,
+        stack_name: str,
+        template_body: str,
+        params: dict[str, str],
+        rollback_on_error: bool = True,
+        tags: dict[str, str] = {},
+        timeout_mins: int = DEFAULT_TIMEOUT_MINS,
+    ) -> Iterator[boto.cloudformation.stack.StackEvent]:
         """Update a stack and wait for it to complete.
 
         As changes are made to the stack, events will be yielded to the caller,
         until the update either finishes or fails.
 
         Args:
-            stack_name (unicode):
+            stack_name (str):
                 The name of the stack to update.
 
-            template_body (unicode):
+            template_body (str):
                 The template to use for the stack.
 
             params (dict):
@@ -227,14 +279,29 @@ class CloudFormation(object):
                 'Stack update failed. Got status: "%s"'
                 % stack_status)
 
-    def delete_stack(self, stack_id):
-        """Delete an existing stack."""
+    def delete_stack(
+        self,
+        stack_id: str,
+    ) -> None:
+        """Delete an existing stack.
+
+        Args:
+            stack_id (str):
+                The ID of the stack to delete.
+        """
         self.cnx.delete_stack(stack_id)
 
-    def _get_stack_has_tags(self, stack, tags):
+    def _get_stack_has_tags(
+        self,
+        stack: boto.cloudformation.stack.Stack,
+        tags: dict[str, str],
+    ) -> bool:
         """Return whether a stack has all specified tags.
 
         Args:
+            stack (boto.cloudformation.stack.Stack):
+                The stack to check.
+
             tags (dict):
                 A dictionary of required tags.
 
@@ -249,17 +316,21 @@ class CloudFormation(object):
 
         return True
 
-    def _wait_for_stack(self, stack_name, last_event_id=None):
+    def _wait_for_stack(
+        self,
+        stack_name: str,
+        last_event_id: Optional[str] = None,
+    ) -> Iterator[tuple[boto.cloudformation.stack.StackEvent, str]]:
         """Wait for a create/update stack operation to complete.
 
         As changes are made to the stack, events will be yielded to the caller,
         until the update either finishes or fails.
 
         Args:
-            stack_name (unicode):
+            stack_name (str):
                 The name of the stack.
 
-            last_event_id (unicode, optional):
+            last_event_id (str, optional):
                 The last known event ID. If specified, only events made after
                 this ID will be yielded.
 

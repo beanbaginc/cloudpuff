@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import os
 import sys
-import textwrap
 from datetime import datetime
+from typing import Optional, Sequence, TYPE_CHECKING
 
 from colorama import Fore, Style
 
@@ -17,11 +17,23 @@ from cloudpuff.templates import TemplateCompiler
 from cloudpuff.templates.errors import TemplateError, TemplateSyntaxError
 from cloudpuff.utils.console import prompt_template_param
 
+if TYPE_CHECKING:
+    import argparse
+
 
 class LaunchStack(BaseCommand):
     """LaunchStackes a CloudFormation stack."""
 
-    def add_options(self, parser):
+    def add_options(
+        self,
+        parser: argparse.ArgumentParser,
+    ) -> None:
+        """Add options for the command.
+
+        Args:
+            parser (argparse.ArgumentParser):
+                The argument parser to add options to.
+        """
         parser.add_argument(
             '--region',
             default='us-east-1',
@@ -59,8 +71,8 @@ class LaunchStack(BaseCommand):
             required=True,
             help='The template file to launch from.')
 
-    def main(self):
-        template_file = self.options.template
+    def main(self) -> None:
+        template_file: str = self.options.template
 
         if not os.path.exists(template_file):
             sys.stderr.write('The template file "%s" could not be found.\n'
@@ -82,25 +94,27 @@ class LaunchStack(BaseCommand):
             sys.stderr.write('Template error: %s\n' % e)
             sys.exit(1)
 
+        assert compiler.meta is not None
+
         template_body = compiler.to_json()
 
         generic_stack_name = compiler.meta['Name']
 
-        self.cf = CloudFormation(self.options.region)
+        self.cf = CloudFormation(region=self.options.region)
         result = self.cf.validate_template(template_body)
         template_params = result.template_parameters
 
         if self.options.update:
-            stack_name = self.options.stack_name
+            keep_params: bool = self.options.keep_params
+            stack_name: str = self.options.stack_name
             stack = self.cf.lookup_stack(stack_name)
 
-            stack_params = dict(
-                (param.key, param.value)
+            stack_params = {
+                param.key: param.value
                 for param in stack.parameters
-            )
+            }
 
-            new_template_params = []
-            template_param_keys = set()
+            template_param_keys: set[str] = set()
 
             # Set the defaults for all template parameters based on what's
             # already used in the stack.
@@ -111,7 +125,7 @@ class LaunchStack(BaseCommand):
                 if key in stack_params:
                     template_param.default_value = stack_params[key]
 
-            if self.options.keep_params:
+            if keep_params:
                 # We're going to keep any parameters already set in the stack,
                 # so exclude any for now so that we don't prompt for them.
                 template_params = [
@@ -124,14 +138,14 @@ class LaunchStack(BaseCommand):
                 template_params,
                 ignore_params=list(compiler.stack_param_lookups.keys()))
 
-            if self.options.keep_params:
+            if keep_params:
                 # Add any existing stack parameters to the list here. Only
                 # include those that exist in the current template.
-                params.update(dict(
-                    (param_key, param_value)
+                params.update({
+                    param_key: param_value
                     for param_key, param_value in stack_params.items()
                     if param_key in template_param_keys
-                ))
+                })
 
             params = self._lookup_stack_params(params, compiler)
 
@@ -193,24 +207,31 @@ class LaunchStack(BaseCommand):
         print('%sStack ID:%s %s' %
               (Style.BRIGHT, Style.RESET_ALL, stack_name))
 
-    def _generate_stack_name(self, base_stack_name):
+    def _generate_stack_name(
+        self,
+        base_stack_name: str,
+    ) -> str:
         """Generate a timestamped name for a new CloudFormation stack.
 
         The name will be consist of the given stack name and a date/time.
 
         Args:
-            base_stack_name (unicode):
+            base_stack_name (str):
                 The base name for the stack.
 
         Returns:
-            unicode:
+            str:
             A stack name in the form of :samp:`{base_stack_name}-{timestamp}`.
         """
         return '%s-%s' % (base_stack_name,
                           datetime.now().strftime('%Y%m%d%H%M%S'))
 
-    def _get_template_params(self, template_parameters, ignore_params=[],
-                             required_params=None):
+    def _get_template_params(
+        self,
+        template_parameters: Sequence[object],
+        ignore_params: list[str] = [],
+        required_params: Optional[dict[str, bool]] = None,
+    ) -> dict[str, str]:
         """Return values for all needed template parameters.
 
         Any parameters needed by the template that weren't provided on the
@@ -251,7 +272,11 @@ class LaunchStack(BaseCommand):
 
         return params
 
-    def _lookup_stack_params(self, params, compiler):
+    def _lookup_stack_params(
+        self,
+        params: dict[str, str],
+        compiler: TemplateCompiler,
+    ) -> dict[str, str]:
         """Look up parameter values from referenced stacks.
 
         Args:
@@ -266,14 +291,13 @@ class LaunchStack(BaseCommand):
             The resulting parameters.
         """
         stack_param_lookups = compiler.stack_param_lookups
-        stack_outputs = {}
-        all_stacks = self.cf.lookup_stacks()
+        stack_outputs: dict[tuple[tuple[str, str], ...], dict[str, str]] = {}
 
         # Go through all external stack parameter lookups requested by this
         # template, and try to find the appropriate stacks.
         for param_name, lookup_info in stack_param_lookups.items():
             stack_name = lookup_info['StackName']
-            required_tags = {
+            required_tags: dict[str, str] = {
                 'GenericStackName': stack_name,
             }
 
@@ -304,10 +328,10 @@ class LaunchStack(BaseCommand):
                         % (stack_name, param_name))
                     sys.exit(1)
 
-                stack_outputs[key] = dict(
-                    (output.key, output.value)
+                stack_outputs[key] = {
+                    output.key: output.value
                     for output in stacks[0].outputs
-                )
+                }
 
             outputs = stack_outputs[key]
             output_name = lookup_info['OutputName']

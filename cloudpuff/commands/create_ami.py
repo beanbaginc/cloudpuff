@@ -8,6 +8,7 @@ import sys
 import textwrap
 import time
 from datetime import datetime
+from typing import Any, Sequence, TYPE_CHECKING
 
 from cloudpuff.ami import AMICreator
 from cloudpuff.cloudformation import CloudFormation
@@ -16,6 +17,9 @@ from cloudpuff.errors import StackCreationError
 from cloudpuff.templates import TemplateCompiler
 from cloudpuff.templates.errors import TemplateError, TemplateSyntaxError
 from cloudpuff.utils.console import prompt_template_param
+
+if TYPE_CHECKING:
+    import argparse
 
 
 class CreateAMI(BaseCommand):
@@ -42,7 +46,16 @@ class CreateAMI(BaseCommand):
 
     AMI_NAME_FORMAT_RE = re.compile('{([A-Za-z0-9_]+)}')
 
-    def add_options(self, parser):
+    def add_options(
+        self,
+        parser: argparse.ArgumentParser,
+    ) -> None:
+        """Add options for the command.
+
+        Args:
+            parser (argparse.ArgumentParser):
+                The argument parser to add options to.
+        """
         parser.add_argument(
             '--region',
             default='us-east-1',
@@ -71,8 +84,8 @@ class CreateAMI(BaseCommand):
             help='Specifies a filename containing the former AMI ID to update '
                  'with the new ID.')
 
-    def main(self):
-        template_file = self.options.template
+    def main(self) -> None:
+        template_file: str = self.options.template
 
         if not os.path.exists(template_file):
             sys.stderr.write('The template file "%s" could not be found.\n'
@@ -100,7 +113,9 @@ class CreateAMI(BaseCommand):
             sys.stderr.write('\n')
             sys.exit(1)
 
-        cf = CloudFormation(self.options.region)
+        assert compiler.doc is not None
+
+        cf = CloudFormation(region=self.options.region)
 
         result = cf.validate_template(template_body)
         params = dict(self._get_template_params(result.template_parameters))
@@ -132,7 +147,12 @@ class CreateAMI(BaseCommand):
         if self.options.update_amis_file and id_map:
             self._update_amis_file(self.options.update_amis_file, id_map)
 
-    def _create_amis(self, stack, ami_outputs, template):
+    def _create_amis(
+        self,
+        stack: boto.cloudformation.stack.Stack,
+        ami_outputs: Sequence[TemplateAMIOutput],
+        template: OrderedDict[str, Any],
+    ) -> dict[str, str]:
         """Create AMIs based on information in the Stack Outputs.
 
         Each AMI will be named based on the information in the Outputs.
@@ -141,22 +161,34 @@ class CreateAMI(BaseCommand):
 
         If multiple AMIs are being created, then they will be created in
         parallel.
+
+        Args:
+            stack (boto.cloudformation.stack.Stack):
+                The stack to create AMIs from.
+
+            ami_outputs (list of
+                         cloudpuff.templates.compiler.TemplateAMIOutput):
+                The output information from the template, used to set
+                values on the AMI.
+
+            template (dict):
+                The compiled template, used to set values on the AMI.
         """
         outputs = dict(
             (output.key, output.value)
             for output in stack.outputs
         )
 
-        id_map = {}
+        id_map: dict[str, str] = {}
         now = datetime.now()
         datestamp = now.strftime('%Y-%m-%d')
-        ami_creator = AMICreator(self.options.region)
+        ami_creator = AMICreator(region=self.options.region)
 
         for ami_info in ami_outputs:
             ami_output_keys = ami_info['outputs']
 
             # Ensure that the keys we expect to find in Outputs all exist.
-            valid_ami_info = True
+            valid_ami_info: bool = True
 
             for output_id in ami_output_keys.values():
                 if output_id not in outputs:
@@ -181,9 +213,9 @@ class CreateAMI(BaseCommand):
             print('Creating AMI "%s" for EC2 instance "%s"'
                   % (ami_name, instance_id))
 
-            pending_ami = ami_creator.create_ami(instance_id,
-                                                 ami_name,
-                                                 ami_description)
+            pending_ami = ami_creator.create_ami(instance_id=instance_id,
+                                                 name=ami_name,
+                                                 description=ami_description)
 
             # If the AMi was configured to indicate the previous AMI
             # created from this server, then store that so we can replace
@@ -202,11 +234,22 @@ class CreateAMI(BaseCommand):
 
         return id_map
 
-    def _update_amis_file(self, filename, id_map):
+    def _update_amis_file(
+        self,
+        filename: str,
+        id_map: dict[str, str],
+    ) -> None:
         """Update the given template file to replace any older AMI IDs.
 
         The given template file will have any older AMI IDs (the keys in
         ``id_map``) with any newer AMI IDs.
+
+        Args:
+            filename (str):
+                The file to read and write.
+
+            id_map (dict):
+                The map used to update AMIs in the file.
         """
         with open(filename, 'r') as fp:
             content = fp.read()
@@ -217,7 +260,7 @@ class CreateAMI(BaseCommand):
         with open(filename, 'w') as fp:
             fp.write(content)
 
-    def _generate_stack_name(self):
+    def _generate_stack_name(self) -> str:
         """Generate a name for a new CloudFormation stack.
 
         The name will be prefixed with "ami-creator-", a normalized version
@@ -232,11 +275,22 @@ class CreateAMI(BaseCommand):
         return 'ami-creator-%s-%s' % (norm_filename,
                                       datetime.now().strftime('%Y%m%d%H%M%S'))
 
-    def _generate_ami_name(self, name_format):
+    def _generate_ami_name(
+        self,
+        name_format: str,
+    ) -> str:
         """Generate a name for an AMI.
 
         This takes an AMI name optionally containing formatting variables,
         and returns a suitable name for the new AMI.
+
+        Args:
+            name_format (str):
+                The format for the AMI name.
+
+        Returns:
+            str:
+            The new AMI name.
         """
         now = datetime.now()
 

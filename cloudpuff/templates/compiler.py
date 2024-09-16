@@ -3,10 +3,35 @@ from __future__ import annotations
 import json
 import os
 from collections import OrderedDict
+from typing import Any, Optional
 
+from typing_extensions import TypedDict
 
 from cloudpuff.errors import InvalidTagError
 from cloudpuff.templates.reader import TemplateReader
+
+
+class TemplateAMIOutputInfo(TypedDict):
+    """Detailed information on an AMI output."""
+
+    #: The key for the previous AMI.
+    previous_ami_key: str
+
+    #: The key for the instance ID.
+    instance_id_key: str
+
+    #: The key for the AMI's name format.
+    name_format_key: str
+
+
+class TemplateAMIOutput(TypedDict):
+    """Information on an AMI output."""
+
+    #: The name of the resource in the template.
+    resource_name: str
+
+    #: The outputs from the template.
+    outputs: TemplateAMIOutputInfo
 
 
 class TemplateCompiler(object):
@@ -17,6 +42,16 @@ class TemplateCompiler(object):
     """
 
     SECTIONS = ('Parameters', 'Mappings', 'Conditions', 'Resources', 'Outputs')
+
+    ######################
+    # Instance variables #
+    ######################
+
+    #: The AMI outputs created by the compiler.
+    ami_outputs: list[TemplateAMIOutput]
+
+    #: The generated template document.
+    doc: Optional[OrderedDict[str, Any]]
 
     def __init__(self, for_amis=False):
         self.doc = None

@@ -1,15 +1,18 @@
-from __future__ import print_function, unicode_literals
+"""Base command support."""
+
+from __future__ import annotations
 
 import argparse
 import sys
 import textwrap
+from typing import Iterable, TYPE_CHECKING
 
 from colorama import Fore, Style, init as init_colorama
 
 from cloudpuff.utils.log import init_logging
 
 
-class BaseCommand(object):
+class BaseCommand:
     """Base class for a cloudpuff command.
 
     This takes care of the standard setup and argument parsing for a command.
@@ -43,10 +46,10 @@ class BaseCommand(object):
         'UPDATE_ROLLBACK_IN_PROGRESS': 'Rolling back update for',
     }
 
-    def main(self):
+    def main(self) -> None:
         raise NotImplementedError
 
-    def run(self):
+    def run(self) -> None:
         """Run the command.
 
         This will parse any options, initialize logging, and call
@@ -61,12 +64,16 @@ class BaseCommand(object):
 
         self.main()
 
-    def setup_options(self):
+    def setup_options(self) -> argparse.ArgumentParser:
         """Set up options for the command.
 
         This instantiates an ArgumentParser with the standard --debug and
         --dry-run options. It then calls the subclass's add_options(),
         which can provide additional options for the parser.
+
+        Returns:
+            argparse.ArgumentParser:
+            The populated argument parser.
         """
         parser = argparse.ArgumentParser(
             description=textwrap.dedent('    %s' % self.__doc__),
@@ -84,19 +91,29 @@ class BaseCommand(object):
 
         return parser
 
-    def add_options(self, parser):
+    def add_options(
+        self,
+        parser: argparse.ArgumentParser,
+    ) -> None:
         """Add custom options to the parser.
 
         Subclasses can override this to add additional options to the
         argument parser.
+
+        Args:
+            parser (argparse.ArgumentParser):
+                The argument parser to add options to.
         """
         pass
 
-    def print_error(self, s):
+    def print_error(
+        self,
+        s: str,
+    ) -> None:
         """Print an error to the console.
 
         Args:
-            s (unicode):
+            s (str):
                 The error string to print.
         """
         sys.stderr.write(textwrap.fill(
@@ -104,11 +121,14 @@ class BaseCommand(object):
             initial_indent='%s ' % self.STYLED_ICON_ERROR,
             subsequent_indent='  '))
 
-    def print_success(self, s):
+    def print_success(
+        self,
+        s: str,
+    ) -> None:
         """Print a success message to the console.
 
         Args:
-            s (unicode):
+            s (str):
                 The string to print.
         """
         print(textwrap.fill(

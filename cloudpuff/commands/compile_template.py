@@ -1,4 +1,6 @@
-from __future__ import unicode_literals
+"""Command for compiling a template."""
+
+from __future__ import annotations
 
 import os
 import sys

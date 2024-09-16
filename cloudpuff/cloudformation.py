@@ -6,13 +6,24 @@ import os
 import time
 from typing import Iterable, Iterator, Optional, Sequence, TYPE_CHECKING
 
-import boto.cloudformation
-from boto.exception import BotoServerError
+import boto3
+from botocore.exceptions import ClientError
 
 from cloudpuff.errors import (StackCreationError,
                               StackLookupError,
                               StackUpdateError,
                               StackUpdateNotRequired)
+
+if TYPE_CHECKING:
+    from mypy_boto3_cloudformation.client import CloudFormationClient
+    from mypy_boto3_cloudformation.literals import StackStatusType
+    from mypy_boto3_cloudformation.type_defs import (
+        ParameterTypeDef,
+        StackEventTypeDef,
+        StackTypeDef,
+        TagTypeDef,
+        ValidateTemplateOutputTypeDef,
+    )
 
 
 class CloudFormation:
@@ -23,6 +34,13 @@ class CloudFormation:
     """
 
     DEFAULT_TIMEOUT_MINS = 30
+
+    ######################
+    # Instance variables #
+    ######################
+
+    #: The client connection to CloudFormation.
+    cnx: CloudFormationClient
 
     def __init__(
         self,
@@ -35,14 +53,16 @@ class CloudFormation:
             region (str):
                 The AWS region to connect to.
         """
-        self.cnx = boto.cloudformation.connect_to_region(region)
+        session = boto3.Session(
+            profile_name=os.environ.get('CLOUDPUFF_AWS_PROFILE'))
+        self.cnx = session.client('cloudformation', region_name=region)
 
     def lookup_stacks(
         self,
         *,
-        statuses: Sequence[str] = [],
+        statuses: Sequence[StackStatusType] = [],
         tags: dict[str, str] = {},
-    ) -> Sequence[boto.cloudformation.stack.Stack]:
+    ) -> Sequence[StackTypeDef]:
         """Return stacks known to CloudFormation.
 
         This can be filtered down by providing one or more valid status strings
@@ -59,13 +79,13 @@ class CloudFormation:
             list of boto.cloudformation.stack.Stack:
             The list of stacks.
         """
-        stacks = self.cnx.describe_stacks()
+        stacks: Iterable[StackTypeDef] = self.cnx.describe_stacks()['Stacks']
 
         if statuses:
             stacks = (
                 stack
                 for stack in stacks
-                if stack.stack_status in statuses
+                if stack['StackStatus'] in statuses
             )
 
         if tags:
@@ -80,7 +100,7 @@ class CloudFormation:
     def lookup_stack(
         self,
         stack_name: str,
-    ) -> boto.cloudformation.stack.Stack:
+    ) -> StackTypeDef:
         """Return the stack with the given name.
 
         Args:
@@ -88,14 +108,17 @@ class CloudFormation:
                 The name of the stack to look up.
 
         Returns:
-            boto.cloudformation.stack.Stack:
+            mypy_boto3_cloudformation.type_defs.StackTypeDef:
             The resulting stack.
 
         Raises:
             cloudpuff.errors.StackLookupError:
                 The stack could not be found.
         """
-        stacks = self.cnx.describe_stacks(stack_name)
+        try:
+            stacks = self.cnx.describe_stacks(StackName=stack_name)['Stacks']
+        except ClientError:
+            stacks = None
 
         if not stacks:
             raise StackLookupError('The stack "%s" was not found' % stack_name)
@@ -105,7 +128,7 @@ class CloudFormation:
     def lookup_stack_events(
         self,
         stack_name: str,
-    ) -> Sequence[boto.cloudformation.stack.StackEvent]:
+    ) -> Sequence[StackEventTypeDef]:
         """Look up all events for a stack.
 
         Args:
@@ -113,15 +136,18 @@ class CloudFormation:
                 The name of the stack to look up events for.
 
         Returns:
-            list of boto.cloudformation.stack.StackEvent:
+            list of mypy_boto3_cloudformation.type_defs.StackEventTypeDef:
             The list of events on the stack, in order of newest to oldest.
         """
-        return self.cnx.describe_stack_events(stack_name)
+        return (
+            self.cnx.describe_stack_events(StackName=stack_name)
+            ['StackEvents']
+        )
 
     def validate_template(
         self,
         template_body: str,
-    ) -> object:
+    ) -> ValidateTemplateOutputTypeDef:
         """Validate the given template string.
 
         Args:
@@ -129,20 +155,21 @@ class CloudFormation:
                 The template body to validate.
 
         Returns:
-            object:
+            mypy_boto3_cloudformation.type_defs.ValidateTemplateOutputTypeDef:
             The validation result.
         """
-        return self.cnx.validate_template(template_body)
+        return self.cnx.validate_template(TemplateBody=template_body)
 
     def create_stack_and_wait(
         self,
+        *,
         stack_name: str,
         template_body: str,
         params: dict[str, str],
         rollback_on_error: bool = True,
         tags: dict[str, str] = {},
         timeout_mins: int = DEFAULT_TIMEOUT_MINS,
-    ) -> Iterator[boto.cloudformation.stack.StackEvent]:
+    ) -> Iterator[StackEventTypeDef]:
         """Create a stack and wait for it to complete.
 
         As changes are made to the stack, events will be yielded to the caller,
@@ -170,24 +197,26 @@ class CloudFormation:
                 giving up.
 
         Yields:
-            boto.cloudformation.stack.StackEvent:
+            mypy_boto3_cloudformation.type_defs.StackEventTypeDef:
             Events for changes being performed.
 
         Raises:
             cloudpuff.errors.StackCreateError:
                 An error creating the stack.
         """
-        stack_id = self.cnx.create_stack(
-            stack_name,
-            template_body=template_body,
-            parameters=list(params.items()),
-            timeout_in_minutes=timeout_mins,
-            disable_rollback=not rollback_on_error,
-            tags=tags,
-            capabilities=['CAPABILITY_IAM', 'CAPABILITY_NAMED_IAM'])
+        stack_id = (
+            self.cnx.create_stack(
+                StackName=stack_name,
+                TemplateBody=template_body,
+                Parameters=self._normalize_params(params),
+                TimeoutInMinutes=timeout_mins,
+                DisableRollback=not rollback_on_error,
+                Tags=self._normalize_tags(tags),
+                Capabilities=['CAPABILITY_IAM', 'CAPABILITY_NAMED_IAM'])
+            ['StackId']
+        )
 
-        stack = None
-        stack_status = None
+        stack_status: Optional[StackStatusType] = None
 
         try:
             for event, stack_status in self._wait_for_stack(stack_id):
@@ -211,7 +240,7 @@ class CloudFormation:
         rollback_on_error: bool = True,
         tags: dict[str, str] = {},
         timeout_mins: int = DEFAULT_TIMEOUT_MINS,
-    ) -> Iterator[boto.cloudformation.stack.StackEvent]:
+    ) -> Iterator[StackEventTypeDef]:
         """Update a stack and wait for it to complete.
 
         As changes are made to the stack, events will be yielded to the caller,
@@ -245,25 +274,28 @@ class CloudFormation:
             cloudpuff.errors.StackUpdateError:
                 An error updating the stack.
         """
-        last_event_id = self.lookup_stack_events(stack_name)[0].event_id
+        last_event_id = self.lookup_stack_events(stack_name)[0]['EventId']
 
         try:
-            stack_id = self.cnx.update_stack(
-                stack_name,
-                template_body=template_body,
-                parameters=list(params.items()),
-                timeout_in_minutes=timeout_mins,
-                disable_rollback=not rollback_on_error,
-                tags=tags,
-                capabilities=['CAPABILITY_IAM'])
-        except BotoServerError as e:
-            if e.message == 'No updates are to be performed.':
-                raise StackUpdateNotRequired(e.message)
-            else:
-                raise StackUpdateError(e.message)
+            stack_id = (
+                self.cnx.update_stack(
+                    StackName=stack_name,
+                    TemplateBody=template_body,
+                    Parameters=self._normalize_params(params),
+                    DisableRollback=not rollback_on_error,
+                    Tags=self._normalize_tags(tags),
+                    Capabilities=['CAPABILITY_IAM', 'CAPABILITY_NAMED_IAM'])
+                ['StackId']
+            )
+        except ClientError as e:
+            msg = str(e)
 
-        stack = None
-        stack_status = None
+            if msg == 'No updates are to be performed.':
+                raise StackUpdateNotRequired(msg)
+            else:
+                raise StackUpdateError(msg)
+
+        stack_status: Optional[StackStatusType] = None
 
         try:
             for event, stack_status in self._wait_for_stack(stack_id,
@@ -281,25 +313,75 @@ class CloudFormation:
 
     def delete_stack(
         self,
-        stack_id: str,
+        stack_name: str,
     ) -> None:
         """Delete an existing stack.
 
         Args:
-            stack_id (str):
-                The ID of the stack to delete.
+            stack_name (str):
+                The name of the stack to delete.
         """
-        self.cnx.delete_stack(stack_id)
+        self.cnx.delete_stack(StackName=stack_name)
+
+    def _normalize_params(
+        self,
+        params: dict[str, str],
+    ) -> Sequence[ParameterTypeDef]:
+        """Normalize parameters for a stack.
+
+        This converts a dictionary of parameter names/values to sequences
+        of dictionaries for CloudFormation's API.
+
+        Args:
+            params (dict):
+                The parameters to normalize.
+
+        Returns:
+            list of dict:
+            The list of normalized parameters.
+        """
+        return [
+            {
+                'ParameterKey': key,
+                'ParameterValue': value,
+            }
+            for key, value in params.items()
+        ]
+
+    def _normalize_tags(
+        self,
+        tags: dict[str, str],
+    ) -> Sequence[TagTypeDef]:
+        """Normalize tags for a stack.
+
+        This converts a dictionary of tags names/values to sequences of
+        dictionaries for CloudFormation's API.
+
+        Args:
+            tags (dict):
+                The tags to normalize.
+
+        Returns:
+            list of dict:
+            The list of tags parameters.
+        """
+        return [
+            {
+                'Key': key,
+                'Value': str(value),
+            }
+            for key, value in tags.items()
+        ]
 
     def _get_stack_has_tags(
         self,
-        stack: boto.cloudformation.stack.Stack,
+        stack: StackTypeDef,
         tags: dict[str, str],
     ) -> bool:
         """Return whether a stack has all specified tags.
 
         Args:
-            stack (boto.cloudformation.stack.Stack):
+            stack (mypy_boto3_cloudformation.type_defs.StackTypeDef):
                 The stack to check.
 
             tags (dict):
@@ -310,8 +392,13 @@ class CloudFormation:
             ``True`` if the stack has all the required tags, or ``False``
             otherwise.
         """
+        stack_tags = {
+            tag['Key']: tag['Value']
+            for tag in stack.get('Tags', [])
+        }
+
         for tag_name, tag_value in tags.items():
-            if not stack.tags.get(tag_name) == tag_value:
+            if stack_tags.get(tag_name) != tag_value:
                 return False
 
         return True
@@ -320,7 +407,7 @@ class CloudFormation:
         self,
         stack_name: str,
         last_event_id: Optional[str] = None,
-    ) -> Iterator[tuple[boto.cloudformation.stack.StackEvent, str]]:
+    ) -> Iterator[tuple[StackEventTypeDef, StackStatusType]]:
         """Wait for a create/update stack operation to complete.
 
         As changes are made to the stack, events will be yielded to the caller,
@@ -336,23 +423,25 @@ class CloudFormation:
 
         Yields:
             tuple:
-            A tuple of (:py:class:`boto.cloudformation.stack.StackEvent`,
-            unicode).
+            A 2-tuple in the form of:
 
-            The first item in the tuple is the next event returned. The
-            second is the stack status shown at last fetch (immediately
-            prior to the current batch of events being processed).
+            Tuple:
+                0 (mypy_boto3_cloudformation.type_defs.StackEventTypeDef):
+                    The next event returned.
+
+                1 (str):
+                    The status shown at the last fetch (immediately prior to
+                    the current batch of events being processed).
         """
         while True:
             stack = self.lookup_stack(stack_name)
             events = self.lookup_stack_events(stack_name)
-            stack_status = stack.stack_status
+            stack_status = stack['StackStatus']
 
-            found_current_event = False
-            new_events = []
+            new_events: list[StackEventTypeDef] = []
 
             for event in events:
-                if event.event_id == last_event_id:
+                if event['EventId'] == last_event_id:
                     break
 
                 new_events.append(event)
@@ -360,7 +449,7 @@ class CloudFormation:
             for event in reversed(new_events):
                 yield event, stack_status
 
-            last_event_id = events[0].event_id
+            last_event_id = events[0]['EventId']
 
             if not stack_status.endswith('IN_PROGRESS'):
                 break

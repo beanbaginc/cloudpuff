@@ -20,6 +20,8 @@ from cloudpuff.utils.console import prompt_template_param
 if TYPE_CHECKING:
     import argparse
 
+    from mypy_boto3_cloudformation.type_defs import TemplateParameterTypeDef
+
 
 class LaunchStack(BaseCommand):
     """LaunchStackes a CloudFormation stack."""
@@ -102,7 +104,7 @@ class LaunchStack(BaseCommand):
 
         self.cf = CloudFormation(region=self.options.region)
         result = self.cf.validate_template(template_body)
-        template_params = result.template_parameters
+        template_params = result.get('Parameters', [])
 
         if self.options.update:
             keep_params: bool = self.options.keep_params
@@ -110,8 +112,9 @@ class LaunchStack(BaseCommand):
             stack = self.cf.lookup_stack(stack_name)
 
             stack_params = {
-                param.key: param.value
-                for param in stack.parameters
+                param['ParameterKey']: param['ParameterValue']
+                for param in stack.get('Parameters', [])
+                if 'ParameterKey' in param and 'ParameterValue' in param
             }
 
             template_param_keys: set[str] = set()
@@ -119,11 +122,14 @@ class LaunchStack(BaseCommand):
             # Set the defaults for all template parameters based on what's
             # already used in the stack.
             for template_param in template_params:
-                key = template_param.parameter_key
+                if 'ParameterKey' not in template_param:
+                    continue
+
+                key = template_param['ParameterKey']
                 template_param_keys.add(key)
 
                 if key in stack_params:
-                    template_param.default_value = stack_params[key]
+                    template_param['DefaultValue'] = stack_params[key]
 
             if keep_params:
                 # We're going to keep any parameters already set in the stack,
@@ -131,7 +137,7 @@ class LaunchStack(BaseCommand):
                 template_params = [
                     template_param
                     for template_param in template_params
-                    if template_param.parameter_key not in stack_params
+                    if template_param.get('ParameterKey') not in stack_params
                 ]
 
             params = self._get_template_params(
@@ -159,13 +165,13 @@ class LaunchStack(BaseCommand):
                     params=params,
                     tags=compiler.get_tags(params),
                     rollback_on_error=self.options.rollback))
-            except StackUpdateNotRequired as e:
+            except StackUpdateNotRequired:
                 print()
                 self.print_success('The stack is already up-to-date!')
                 return
             except StackUpdateError as e:
                 sys.stderr.write('\n')
-                self.print_error('Updating the stack has failed.')
+                self.print_error('Updating the stack has failed: %s' % e)
                 sys.stderr.write('\n')
                 sys.stderr.write('You can update the template and try again '
                                  'with:\n')
@@ -196,7 +202,7 @@ class LaunchStack(BaseCommand):
                     rollback_on_error=self.options.rollback))
             except StackCreationError as e:
                 sys.stderr.write('\n')
-                self.print_error('Creating the stack has failed.')
+                self.print_error('Creating the stack has failed: %s' % e)
                 sys.stderr.write('\n')
                 sys.stderr.write('Delete the stack and try again.\n')
                 sys.exit(1)
@@ -228,7 +234,7 @@ class LaunchStack(BaseCommand):
 
     def _get_template_params(
         self,
-        template_parameters: Sequence[object],
+        template_parameters: Sequence[TemplateParameterTypeDef],
         ignore_params: list[str] = [],
         required_params: Optional[dict[str, bool]] = None,
     ) -> dict[str, str]:
@@ -263,12 +269,15 @@ class LaunchStack(BaseCommand):
         )
 
         for template_param in template_parameters:
-            param_name = template_param.parameter_key
+            param_name = template_param.get('ParameterKey')
 
-            if param_name not in params and param_name not in ignore_params:
+            if (param_name and
+                param_name not in params and
+                param_name not in ignore_params):
+
                 params[param_name] = prompt_template_param(
                     template_param,
-                    required=required_params[param_name])
+                    required=required_params.get(param_name, False))
 
         return params
 
@@ -329,23 +338,23 @@ class LaunchStack(BaseCommand):
                     sys.exit(1)
 
                 stack_outputs[key] = {
-                    output.key: output.value
-                    for output in stacks[0].outputs
+                    output['OutputKey']: output['OutputValue']
+                    for output in stacks[0].get('Outputs', [])
+                    if 'OutputKey' in output and 'OutputValue' in output
                 }
 
-            outputs = stack_outputs[key]
-            output_name = lookup_info['OutputName']
+            lookup_output_name = lookup_info['OutputName']
 
-            for output in stacks[0].outputs:
-                if output.key == output_name:
-                    params[param_name] = output.value
-                    break
+            try:
+                params[param_name] = stack_outputs[key][lookup_output_name]
+            except KeyError:
+                pass
 
             if param_name not in params:
                 self.print_error(
                     'Could not find the output "%s" in the stack "%s", as '
                     'needed by the stack parameter "%s".'
-                    % (output_name, stack_name, param_name))
+                    % (lookup_output_name, stack_name, param_name))
                 sys.exit(1)
 
         return params

@@ -49,4 +49,4 @@ def init_logging(debug=False):
 
     # Disable all non-critical errors from boto. We want to catch them and
     # handle them ourselves.
-    logging.getLogger('boto').setLevel(logging.CRITICAL)
+    logging.getLogger('boto3').setLevel(logging.CRITICAL)

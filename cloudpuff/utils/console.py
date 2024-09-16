@@ -21,18 +21,16 @@ def prompt_template_param(template_param, required=True):
         The value chosen for the parameter, or the default value if not
         specified.
     """
-    key = template_param.parameter_key
-    default_value = template_param.default_value
+    key = template_param['ParameterKey']
+    default_value = template_param['DefaultValue']
 
     print()
-    print(template_param.description)
+    print(template_param['Description'])
 
     if default_value:
-        prompt = '%s [%s]: ' % (key, default_value)
+        prompt = f'{key} [{default_value}]: '
     else:
-        prompt = '%s: ' % key
-
-    prompt = prompt.encode('utf-8')
+        prompt = f'{key}: '
 
     while True:
         # We should be checking template_param.no_echo, and using getpass()

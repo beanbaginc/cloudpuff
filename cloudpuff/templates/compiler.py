@@ -169,7 +169,7 @@ class TemplateCompiler(object):
         assert meta is not None
 
         tags = {
-            'GenericStackName': self.meta['Name'],
+            'GenericStackName': meta['Name'],
         }
 
         if 'Version' in meta:

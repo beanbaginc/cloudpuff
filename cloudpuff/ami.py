@@ -5,7 +5,12 @@ from __future__ import annotations
 import os
 from typing import Optional, TYPE_CHECKING
 
-import boto.ec2
+import boto3
+
+if TYPE_CHECKING:
+    from mypy_boto3_ec2.client import EC2Client
+    from mypy_boto3_ec2.literals import ImageStateType
+    from mypy_boto3_ec2.type_defs import ImageTypeDef
 
 
 class PendingAMI:
@@ -18,6 +23,9 @@ class PendingAMI:
     ######################
     # Instance variables #
     ######################
+
+    #: The AMI creator managing this pending AMI.
+    creator: AMICreator
 
     #: The ID of the pending AMI.
     id: str
@@ -37,19 +45,18 @@ class PendingAMI:
             ami_id (str):
                 The ID of the pending AMI.
         """
+        self.creator = creator
         self.id = ami_id
-        self.ami = creator.cnx.get_all_images([ami_id])[0]
 
     @property
-    def state(self) -> str:
+    def state(self) -> Optional[ImageStateType]:
         """Return the state of the creation.
 
         Every time this is called, the state will be re-fetched from the
         server.
         """
-        self.ami.update()
-
-        return self.ami.state
+        results = self.creator.cnx.describe_images(ImageIds=[self.id])
+        return results['Images'][0].get('State')
 
 
 class AMICreator:
@@ -57,17 +64,25 @@ class AMICreator:
 
     Multiple AMIs can be created in parallel, and the status of the
     creations can be checked through the ``pending`` property.
+
+    This will connect to EC2 using local AWS credentials. The credentials
+    profile name can be specified using the :envvar:`CLOUDPUFF_AWS_PROFILE`
+    environment variable.
     """
 
     ######################
     # Instance variables #
     ######################
 
+    #: The EC2 client connection.
+    cnx: EC2Client
+
     #: The list of pending AMIs.
     pending_amis: list[PendingAMI]
 
     def __init__(
         self,
+        *,
         region: str,
     ) -> None:
         """Initialize the AMI creator.
@@ -76,11 +91,14 @@ class AMICreator:
             region (str):
                 The AWS region to connect to.
         """
-        self.cnx = boto.ec2.connect_to_region(region)
+        session = boto3.Session(
+            profile_name=os.environ.get('CLOUDPUFF_AWS_PROFILE'))
+        self.cnx = session.client('ec2', region_name=region)
         self.pending_amis = []
 
     def create_ami(
         self,
+        *,
         instance_id: str,
         name: str,
         description: str,
@@ -104,9 +122,11 @@ class AMICreator:
             PendingAMI:
             The pending AMI instance.
         """
-        ami_id = self.cnx.create_image(instance_id, ami_name, ami_description)
+        result = self.cnx.create_image(InstanceId=instance_id,
+                                       Name=name,
+                                       Description=description)
         pending_ami = PendingAMI(creator=self,
-                                 ami_id=ami_id)
+                                 ami_id=result['ImageId'])
         self.pending_amis.append(pending_ami)
 
         return pending_ami

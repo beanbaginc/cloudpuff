@@ -11,6 +11,9 @@ from colorama import Fore, Style, init as init_colorama
 
 from cloudpuff.utils.log import init_logging
 
+if TYPE_CHECKING:
+    from mypy_boto3_cloudformation.type_defs import StackEventTypeDef
+
 
 class BaseCommand:
     """Base class for a cloudpuff command.
@@ -136,7 +139,10 @@ class BaseCommand:
             initial_indent='%s ' % self.STYLED_ICON_SUCCESS,
             subsequent_indent='  '))
 
-    def print_stack_events(self, events):
+    def print_stack_events(
+        self,
+        events: Iterable[StackEventTypeDef],
+    ) -> None:
         """Print stack events to the console as they come in.
 
         This will take a generator of stack events and print them out as
@@ -149,7 +155,7 @@ class BaseCommand:
                 A generator of events.
         """
         for event in events:
-            event_status = event.resource_status
+            event_status = event.get('ResourceStatus', '')
 
             if event_status.endswith('FAILED'):
                 icon = self.ICON_ERROR
@@ -172,13 +178,16 @@ class BaseCommand:
             action = self.EVENT_ACTION_LABELS.get(event_status, event_status)
 
             print('%s%s%s %s %s (%s)'
-                   % (status_color, icon, Style.RESET_ALL, action,
-                      event.logical_resource_id, event.resource_type))
+                  % (status_color, icon, Style.RESET_ALL, action,
+                     event.get('LogicalResourceId'),
+                     event.get('ResourceType')))
 
-            if event.resource_status_reason:
+            status_reason = event.get('ResourceStatusReason')
+
+            if status_reason:
                 print('%s%s%s'
                       % (status_color,
-                         textwrap.fill(event.resource_status_reason,
+                         textwrap.fill(status_reason,
                                        initial_indent='  ',
                                        subsequent_indent='  '),
                          Style.RESET_ALL))

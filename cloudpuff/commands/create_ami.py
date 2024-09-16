@@ -20,6 +20,14 @@ from cloudpuff.utils.console import prompt_template_param
 
 if TYPE_CHECKING:
     import argparse
+    from collections import OrderedDict
+
+    from mypy_boto3_cloudformation.type_defs import (
+        StackTypeDef,
+        TemplateParameterTypeDef,
+    )
+
+    from cloudpuff.templates.compiler import TemplateAMIOutput
 
 
 class CreateAMI(BaseCommand):
@@ -118,7 +126,8 @@ class CreateAMI(BaseCommand):
         cf = CloudFormation(region=self.options.region)
 
         result = cf.validate_template(template_body)
-        params = dict(self._get_template_params(result.template_parameters))
+        params = self._get_template_params(
+            result.get('TemplateParameters', []))
 
         print()
         print('Creating the CloudFormation stack.')
@@ -142,14 +151,14 @@ class CreateAMI(BaseCommand):
         stack = cf.lookup_stack(stack_name)
 
         id_map = self._create_amis(stack, compiler.ami_outputs, compiler.doc)
-        cf.delete_stack(stack.stack_id)
+        cf.delete_stack(stack_name)
 
         if self.options.update_amis_file and id_map:
             self._update_amis_file(self.options.update_amis_file, id_map)
 
     def _create_amis(
         self,
-        stack: boto.cloudformation.stack.Stack,
+        stack: StackTypeDef,
         ami_outputs: Sequence[TemplateAMIOutput],
         template: OrderedDict[str, Any],
     ) -> dict[str, str]:
@@ -163,7 +172,7 @@ class CreateAMI(BaseCommand):
         parallel.
 
         Args:
-            stack (boto.cloudformation.stack.Stack):
+            stack (mypy_boto3_cloudformation.type_defs.StackTypeDef):
                 The stack to create AMIs from.
 
             ami_outputs (list of
@@ -174,10 +183,11 @@ class CreateAMI(BaseCommand):
             template (dict):
                 The compiled template, used to set values on the AMI.
         """
-        outputs = dict(
-            (output.key, output.value)
-            for output in stack.outputs
-        )
+        outputs = {
+            output['OutputKey']: output['OutputValue']
+            for output in stack.get('Outputs', [])
+            if 'OutputKey' in output and 'OutputValue' in output
+        }
 
         id_map: dict[str, str] = {}
         now = datetime.now()
@@ -307,13 +317,25 @@ class CreateAMI(BaseCommand):
             lambda m: name_format_vars[m.group(1)],
             name_format)
 
-    def _get_template_params(self, template_parameters):
+    def _get_template_params(
+        self,
+        template_parameters: Sequence[TemplateParameterTypeDef],
+    ) -> dict[str, str]:
         """Return values for all needed template parameters.
 
         Any parameters needed by the template that weren't provided on the
         command line will be requested on the console. Users will get the
         key name, default value, and a description, and will be prompted for
         a suitable value for the template.
+
+        Args:
+            template_parameters (list of mypy_boto3_cloudformation.type_defs.
+                                 TemplateParameterTypeDef):
+                The template parameters from the stack.
+
+        Returns:
+            dict:
+            The parsed template parameters.
         """
         params = dict(
             param.split('=', 1)
@@ -321,12 +343,15 @@ class CreateAMI(BaseCommand):
         )
 
         for template_param in template_parameters:
-            key = template_param.parameter_key
+            if 'ParameterKey' not in template_param:
+                continue
+
+            key = template_param['ParameterKey']
 
             if key not in params:
                 params[key] = prompt_template_param(template_param)
 
-        return list(params.items())
+        return params
 
 
 def main():

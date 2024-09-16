@@ -13,6 +13,8 @@ from cloudpuff.commands import BaseCommand, run_command
 if TYPE_CHECKING:
     import argparse
 
+    from mypy_boto3_cloudformation.type_defs import StackTypeDef
+
 
 class ListStacks(BaseCommand):
     """Lists all stacks and their outputs in CloudFormation."""
@@ -54,7 +56,7 @@ class ListStacks(BaseCommand):
             stacks = [
                 stack
                 for stack in stacks
-                if stack.stack_name in stack_names
+                if stack['StackName'] in stack_names
             ]
 
         if self.options.json:
@@ -64,27 +66,31 @@ class ListStacks(BaseCommand):
 
     def _print_stacks_json(
         self,
-        stacks: Sequence[boto.cloudformation.stack.Stack],
+        stacks: Sequence[StackTypeDef],
     ) -> None:
         """Print the list of stacks as pretty-printed JSON.
 
         Args:
-            stacks (list of boto.cloudformation.stack.Stack):
+            stacks (list of mypy_boto3_cloudformation.type_defs.StackTypeDef):
                 List of stacks to print.
         """
         print(json.dumps(
             [
                 {
-                    'name': stack.stack_name,
-                    'status': stack.stack_status,
-                    'description': stack.description,
-                    'arn': stack.stack_id,
-                    'created': stack.creation_time.isoformat(),
-                    'tags': stack.tags,
-                    'outputs': dict(
-                        (output.key, output.value)
-                        for output in stacks
-                    ),
+                    'name': stack['StackName'],
+                    'status': stack['StackStatus'],
+                    'description': stack.get('Description', ''),
+                    'arn': stack.get('StackId', ''),
+                    'created': stack['CreationTime'].isoformat(),
+                    'tags': {
+                        tag['Key']: tag['Value']
+                        for tag in stack.get('Tags', [])
+                    },
+                    'outputs': {
+                        output['OutputKey']: output.get('OutputValue', '')
+                        for output in stack.get('Outputs', [])
+                        if 'OutputKey' in output
+                    },
                 }
                 for stack in stacks
             ],
@@ -92,12 +98,12 @@ class ListStacks(BaseCommand):
 
     def _print_stacks(
         self,
-        stacks: Sequence[boto.cloudformation.stack.Stack],
+        stacks: Sequence[StackTypeDef],
     ) -> None:
         """Print the list of stacks as formatted console output.
 
         Args:
-            stacks (list of boto.cloudformation.stack.Stack):
+            stacks (list of mypy_boto3_cloudformation.type_defs.StackTypeDef):
                 List of stacks to print.
         """
         first: bool = True
@@ -109,7 +115,7 @@ class ListStacks(BaseCommand):
                 print()
                 print()
 
-            stack_status = stack.stack_status
+            stack_status = stack['StackStatus']
 
             if stack_status.endswith('FAILED'):
                 status_color = Fore.RED
@@ -120,24 +126,42 @@ class ListStacks(BaseCommand):
             else:
                 status_color = None
 
-            self._print_field(stack.stack_name, key_color=Fore.CYAN)
-            self._print_field('Status', stack.stack_status, indent_level=1,
+            self._print_field(stack['StackName'],
+                              key_color=Fore.CYAN)
+            self._print_field('Status',
+                              stack_status,
+                              indent_level=1,
                               value_color=status_color)
-            self._print_field('Description', stack.description, indent_level=1)
-            self._print_field('ARN', stack.stack_id, indent_level=1)
-            self._print_field('Created', stack.creation_time, indent_level=1)
+            self._print_field('Description',
+                              stack.get('Description', ''),
+                              indent_level=1)
+            self._print_field('ARN',
+                              stack.get('StackId', ''),
+                              indent_level=1)
+            self._print_field('Created',
+                              stack.get('CreationTime', None),
+                              indent_level=1)
 
-            if stack.outputs:
+            outputs = stack.get('Outputs')
+
+            if outputs:
                 self._print_field('Outputs', indent_level=1)
 
-                for output in stack.outputs:
-                    self._print_field(output.key, output.value, indent_level=2)
+                for output in outputs:
+                    if 'OutputKey' in output:
+                        self._print_field(output['OutputKey'],
+                                          output.get('OutputValue', ''),
+                                          indent_level=2)
 
-            if stack.tags:
+            tags = stack.get('Tags', [])
+
+            if tags:
                 self._print_field('Tags', indent_level=1)
 
-                for tag_name, tag_value in stack.tags.items():
-                    self._print_field(tag_name, tag_value, indent_level=2)
+                for tag in tags:
+                    self._print_field(tag['Key'],
+                                      tag['Value'],
+                                      indent_level=2)
 
     def _print_field(
         self,

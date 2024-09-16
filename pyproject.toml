@@ -1,0 +1,40 @@
+[build-system]
+requires = ['setuptools>=74']
+build-backend = 'setuptools.build_meta'
+
+
+[project]
+name = 'cloudpuff'
+description = 'Powerful tools for working with AWS CloudFormation.'
+authors = [
+    {name = 'Beanbag, Inc.', email = 'questions@beanbaginc.com' },
+]
+license = { text = 'MIT' }
+requires-python = '>=3.8'
+dynamic = ['version']
+
+dependencies = [
+    'boto',
+    'boto3',
+    'colorama~=0.4.6',
+    'PyYAML~=6.0.2',
+    'typing_extensions>=4.3.0',
+]
+
+
+[project.scripts]
+cloudpuff-create-ami = 'cloudpuff.commands.create_ami:main'
+cloudpuff-compile-template = 'cloudpuff.commands.compile_template:main'
+cloudpuff-launch-stack = 'cloudpuff.commands.launch_stack:main'
+cloudpuff-list-stacks = 'cloudpuff.commands.list_stacks:main'
+cloudpuff-make-depends = 'cloudpuff.commands.make_depends:main'
+
+
+[tool.setuptools.packages.find]
+where = ['.']
+include = ['cloudpuff*']
+namespaces = false
+
+
+[tool.setuptools.dynamic]
+version = { attr = 'cloudpuff.__version__' }

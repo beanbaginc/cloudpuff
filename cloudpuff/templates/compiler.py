@@ -1,10 +1,9 @@
-from __future__ import unicode_literals
+from __future__ import annotations
 
 import json
 import os
 from collections import OrderedDict
 
-import six
 
 from cloudpuff.errors import InvalidTagError
 from cloudpuff.templates.reader import TemplateReader
@@ -130,19 +129,22 @@ class TemplateCompiler(object):
             A dictionary of tags for the stack.
         """
         params = dict(params)
+        meta = self.meta
+
+        assert meta is not None
 
         tags = {
             'GenericStackName': self.meta['Name'],
         }
 
-        if 'Version' in self.meta:
-            tags['StackVersion'] = six.text_type(self.meta['Version'])
+        if 'Version' in meta:
+            tags['StackVersion'] = meta['Version']
 
-        for tag_name, tag_value in six.iteritems(self.meta.get('Tags', {})):
+        for tag_name, tag_value in meta.get('Tags', {}).items():
             if isinstance(tag_value, dict) and 'Ref' in tag_value:
                 tag_value = params[tag_value['Ref']]
 
-            if not isinstance(tag_value, six.text_type):
+            if not isinstance(tag_value, str):
                 raise InvalidTagError(
                     'Invalid value "%r" for tag "%s" found in the stack '
                     'metadata.'
@@ -159,7 +161,10 @@ class TemplateCompiler(object):
         tracked in :py:attr:`stack_param_lookups` so that data from those
         parameters can be scanned from an external stack later.
         """
-        for param_name, param in six.iteritems(self.doc['Parameters']):
+        doc = self.doc
+        assert doc is not None
+
+        for param_name, param in doc['Parameters'].items():
             # Grab the data and delete it from the parameter, so that
             # CloudFormation doesn't get confused by it.
             lookup_from_stack = param.pop('LookupFromStack', None)
@@ -171,9 +176,12 @@ class TemplateCompiler(object):
                 param.pop('Required', 'true').lower() == 'true'
 
     def _scan_cloudpuff_metadata(self):
+        doc = self.doc
+        assert doc is not None
+
         ami_metadata = []
 
-        for resource_name, resource in six.iteritems(self.doc['Resources']):
+        for resource_name, resource in doc['Resources'].items():
             if (not isinstance(resource, dict) or
                 resource.get('Type') != 'AWS::EC2::Instance' or
                 'CloudPuff' not in resource.get('Metadata', {})):

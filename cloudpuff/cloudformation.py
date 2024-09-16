@@ -3,7 +3,6 @@ from __future__ import unicode_literals
 import time
 
 import boto.cloudformation
-import six
 from boto.exception import BotoServerError
 
 from cloudpuff.errors import (StackCreationError, StackLookupError,
@@ -136,7 +135,7 @@ class CloudFormation(object):
         stack_id = self.cnx.create_stack(
             stack_name,
             template_body=template_body,
-            parameters=list(six.iteritems(params)),
+            parameters=list(params.items()),
             timeout_in_minutes=timeout_mins,
             disable_rollback=not rollback_on_error,
             tags=tags,
@@ -200,7 +199,7 @@ class CloudFormation(object):
             stack_id = self.cnx.update_stack(
                 stack_name,
                 template_body=template_body,
-                parameters=list(six.iteritems(params)),
+                parameters=list(params.items()),
                 timeout_in_minutes=timeout_mins,
                 disable_rollback=not rollback_on_error,
                 tags=tags,
@@ -244,7 +243,7 @@ class CloudFormation(object):
             ``True`` if the stack has all the required tags, or ``False``
             otherwise.
         """
-        for tag_name, tag_value in six.iteritems(tags):
+        for tag_name, tag_value in tags.items():
             if not stack.tags.get(tag_name) == tag_value:
                 return False
 

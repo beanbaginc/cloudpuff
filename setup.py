@@ -31,7 +31,6 @@ setup(
         'boto',
         'colorama',
         'PyYAML>=3.11',
-        'six',
     ],
     maintainer='Christian Hammond',
     maintainer_email='christian@beanbaginc.com'

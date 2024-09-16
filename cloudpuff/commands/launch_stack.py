@@ -1,11 +1,12 @@
-from __future__ import print_function, unicode_literals
+"""Command for launching a stack."""
+
+from __future__ import annotations
 
 import os
 import sys
 import textwrap
 from datetime import datetime
 
-import six
 from colorama import Fore, Style
 
 from cloudpuff.cloudformation import CloudFormation
@@ -128,7 +129,7 @@ class LaunchStack(BaseCommand):
                 # include those that exist in the current template.
                 params.update(dict(
                     (param_key, param_value)
-                    for param_key, param_value in six.iteritems(stack_params)
+                    for param_key, param_value in stack_params.items()
                     if param_key in template_param_keys
                 ))
 
@@ -270,7 +271,7 @@ class LaunchStack(BaseCommand):
 
         # Go through all external stack parameter lookups requested by this
         # template, and try to find the appropriate stacks.
-        for param_name, lookup_info in six.iteritems(stack_param_lookups):
+        for param_name, lookup_info in stack_param_lookups.items():
             stack_name = lookup_info['StackName']
             required_tags = {
                 'GenericStackName': stack_name,
@@ -279,7 +280,7 @@ class LaunchStack(BaseCommand):
             for tag_name in lookup_info['MatchStackTags']:
                 required_tags[tag_name] = params[tag_name]
 
-            key = tuple(six.iteritems(required_tags))
+            key = tuple(required_tags.items())
 
             if key not in stack_outputs:
                 # We don't have anything for this stack yet, so try to find

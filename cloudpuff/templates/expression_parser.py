@@ -72,7 +72,7 @@ class ExpressionParser(object):
         The next token will be fetched from the generator in _iter_tokens.
         """
         try:
-            self._cur_token = self._tokens.next()
+            self._cur_token = next(self._tokens)
         except StopIteration:
             self._cur_token = None
 

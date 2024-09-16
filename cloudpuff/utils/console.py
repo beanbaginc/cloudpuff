@@ -1,7 +1,5 @@
 from __future__ import print_function, unicode_literals
 
-from six.moves import input
-
 
 def prompt_template_param(template_param, required=True):
     """Prompt the user for a template parameter.

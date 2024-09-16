@@ -1,4 +1,4 @@
-from __future__ import unicode_literals
+from __future__ import annotations
 
 import re
 
@@ -346,7 +346,7 @@ class IfBlockFunction(BlockFunction):
 
         if isinstance(self.params[0], dict):
             param = IfCondition(self.params[0])
-        elif isinstance(self.params[0], basestring):
+        elif isinstance(self.params[0], str):
             param = self.params[0]
         else:
             raise ConstructorError('Invalid parameter to If: %r'

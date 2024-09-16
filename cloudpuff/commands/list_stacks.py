@@ -1,11 +1,12 @@
-from __future__ import print_function, unicode_literals
+"""Command for listing stacks."""
+
+from __future__ import annotations
 
 import json
 import os
 import sys
 from datetime import datetime
 
-import six
 from colorama import Fore, Style
 
 from cloudpuff.cloudformation import CloudFormation
@@ -117,7 +118,7 @@ class ListStacks(BaseCommand):
             if stack.tags:
                 self._print_field('Tags', indent_level=1)
 
-                for tag_name, tag_value in six.iteritems(stack.tags):
+                for tag_name, tag_value in stack.tags.items():
                     self._print_field(tag_name, tag_value, indent_level=2)
 
     def _print_field(self, key, value='', indent_level=0, key_color=None,

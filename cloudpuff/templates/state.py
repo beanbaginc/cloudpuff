@@ -1,8 +1,6 @@
-from __future__ import unicode_literals
+from __future__ import annotations
 
 from collections import OrderedDict
-
-import six
 
 
 class TemplateState(object):
@@ -59,7 +57,7 @@ class TemplateState(object):
                 (self.process_tree(key, variables, resolve_variables),
                  self.process_tree(value, variables, resolve_variables,
                                    resolve_if_conditions))
-                for key, value in six.iteritems(node_value)
+                for key, value in node_value.items()
             )
         elif isinstance(node_value, list):
             value = [
@@ -69,7 +67,7 @@ class TemplateState(object):
             ]
 
             if isinstance(node_value, VarsStringsList):
-                if all(isinstance(item, basestring) for item in value):
+                if all(isinstance(item, str) for item in value):
                     value = ''.join(value)
                 else:
                     value = {
@@ -113,7 +111,7 @@ class TemplateState(object):
         for item in l:
             if isinstance(item, VarReference):
                 has_vars = True
-            elif not isinstance(item, basestring):
+            elif not isinstance(item, str):
                 return l
 
         if has_vars:
@@ -150,7 +148,7 @@ class TemplateState(object):
                     collapse_string = can_collapse_string
                     collapse_next_string = can_collapse_string
 
-            if isinstance(item, basestring):
+            if isinstance(item, str):
                 if collapse_string and result:
                     result[-1] += item
                 else:
@@ -199,6 +197,9 @@ class VarReference(object):
             return False
 
         return self.name == other.name
+
+    def __hash__(self):
+        return hash(self.name)
 
     def __repr__(self):
         return '<VarReference(%s)>' % self.name

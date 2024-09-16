@@ -1,4 +1,6 @@
-from __future__ import print_function, unicode_literals
+"""Command for creating a new AMI."""
+
+from __future__ import annotations
 
 import os
 import re
@@ -6,8 +8,6 @@ import sys
 import textwrap
 import time
 from datetime import datetime
-
-import six
 
 from cloudpuff.ami import AMICreator
 from cloudpuff.cloudformation import CloudFormation
@@ -158,7 +158,7 @@ class CreateAMI(BaseCommand):
             # Ensure that the keys we expect to find in Outputs all exist.
             valid_ami_info = True
 
-            for output_id in six.itervalues(ami_output_keys):
+            for output_id in ami_output_keys.values():
                 if output_id not in outputs:
                     sys.stderr.write(textwrap.fill(
                         'Could not create AMI for "%s". Output '
@@ -211,7 +211,7 @@ class CreateAMI(BaseCommand):
         with open(filename, 'r') as fp:
             content = fp.read()
 
-        for orig_id, new_id in six.iteritems(id_map):
+        for orig_id, new_id in id_map.items():
             content = content.replace(orig_id, new_id)
 
         with open(filename, 'w') as fp:

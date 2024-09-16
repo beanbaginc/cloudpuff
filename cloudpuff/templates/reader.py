@@ -1,4 +1,4 @@
-from __future__ import unicode_literals
+from __future__ import annotations
 
 import os
 import random
@@ -99,7 +99,7 @@ class TemplateLoader(yaml.Loader):
         pairs = self.construct_pairs(node)
 
         for key, value in pairs:
-            if isinstance(key, basestring) and key == '<':
+            if isinstance(key, str) and key == '<':
                 d.update(value)
             else:
                 d[key] = value
@@ -302,9 +302,9 @@ class TemplateLoader(yaml.Loader):
         values = self.construct_mapping(node)
         tags = []
 
-        for key, value in values.iteritems():
+        for key, value in values.items():
             if not isinstance(value, (dict, VarReference)):
-                value = unicode(value)
+                value = str(value)
 
             tag = OrderedDict()
             tag['Key'] = key
@@ -323,7 +323,7 @@ class TemplateLoader(yaml.Loader):
         try:
             return self.template_state.process_tree(macro_value, variables)
         except KeyError as e:
-            raise ConstructorError(unicode(e))
+            raise ConstructorError(str(e))
 
 
 class TemplateReader(object):

@@ -37,7 +37,7 @@ class CompileTemplate(BaseCommand):
             dirname = os.path.dirname(self.options.dest_filename)
 
             if not os.path.exists(dirname):
-                os.makedirs(dirname, 0755)
+                os.makedirs(dirname, 0o755)
 
             try:
                 with open(self.options.dest_filename, 'w') as fp:
@@ -47,7 +47,7 @@ class CompileTemplate(BaseCommand):
                                  % (self.options.dest_filename, e))
                 sys.exit(1)
         else:
-            print dumped
+            print(dumped)
 
 
 def main():

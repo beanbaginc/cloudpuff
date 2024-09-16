@@ -444,12 +444,14 @@ class CloudFormation:
                 if event['EventId'] == last_event_id:
                     break
 
-                new_events.append(event)
+                if event.get('PhysicalResourceId'):
+                    new_events.append(event)
 
-            for event in reversed(new_events):
-                yield event, stack_status
+            if new_events:
+                for event in reversed(new_events):
+                    yield event, stack_status
 
-            last_event_id = events[0]['EventId']
+                last_event_id = events[0]['EventId']
 
             if not stack_status.endswith('IN_PROGRESS'):
                 break
